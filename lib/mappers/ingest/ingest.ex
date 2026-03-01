@@ -85,7 +85,7 @@ defmodule Mappers.Ingest do
     normalized_message = %{
       "app_eui" => "0000000000000000", # ChirpStack does not provide this field
       "dev_eui" => get_in(message, ["deviceInfo", "devEui"]),
-      "id" => get_in(message, ["deviceInfo", "deviceProfileId"]),
+      "id" => message["deduplicationId"],
       "fcnt" => message["fCnt"],
       "reported_at" => parse_reported_at(message["time"]),
       "frequency" => tx_frequency,
@@ -99,15 +99,14 @@ defmodule Mappers.Ingest do
         },
         "status" => "success"
       },
-      "hotspots" => normalize_hotspots(message["rxInfo"], tx_frequency, spreading),
-      "id" => message["deduplicationId"]
+      "hotspots" => normalize_hotspots(message["rxInfo"], tx_frequency, spreading)
     }
 
     {:ok, normalized_message}
   end
 
-  defp normalize_payload(message) do
-    # Assume Console payload already has the necessary fields
+  defp normalize_payload(%{"decoded" => %{"payload" => _}, "hotspots" => _} = message) do
+    # Console payload already has the necessary fields
     normalized_message = %{
       "app_eui" => message["app_eui"],
       "dev_eui" => message["dev_eui"],
@@ -131,8 +130,13 @@ defmodule Mappers.Ingest do
     {:ok, normalized_message}
   end
 
+  defp normalize_payload(_message) do
+    {:error, "Unrecognized payload format"}
+  end
+
   defp normalize_hotspots(rxInfo, tx_frequency, spreading) do
-    Enum.filter_map(rxInfo, fn info ->
+    rxInfo
+    |> Enum.filter(fn info ->
       lat = get_in(info, ["metadata", "gateway_lat"])
       long = get_in(info, ["metadata", "gateway_long"])
 
@@ -142,7 +146,8 @@ defmodule Mappers.Ingest do
       else
         true
       end
-    end, fn info ->
+    end)
+    |> Enum.map(fn info ->
       %{
         "id" => get_in(info, ["metadata", "gateway_id"]),
         "name" => get_in(info, ["metadata", "gateway_name"]),

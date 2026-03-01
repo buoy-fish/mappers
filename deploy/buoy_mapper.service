@@ -1,0 +1,24 @@
+[Unit]
+Description=Buoy Fish Coverage Mapper (Helium Mappers Fork)
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/map.buoy.fish
+EnvironmentFile=/home/ubuntu/map.buoy.fish/.env
+ExecStart=/nix/var/nix/profiles/default/bin/nix develop --command mix phx.server
+Restart=on-failure
+RestartSec=5s
+StandardOutput=append:/var/log/buoymapper.log
+StandardError=append:/var/log/buoymapper.error.log
+SyslogIdentifier=buoymapper
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,9 +1,10 @@
 import * as React from 'react';
-import { useState, useRef } from 'react';
-import MapGL, { Source, Layer, FlyToInterpolator, LinearInterpolator, WebMercatorViewport, GeolocateControl, LngLat } from 'react-map-gl';
+import { useState, useRef, useCallback } from 'react';
+import MapGL, { Source, Layer, GeolocateControl, NavigationControl } from 'react-map-gl/maplibre';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import InfoPane from "../components/InfoPane"
 import WelcomeModal from "../components/WelcomeModal"
-import { uplinkTileServerLayer, hotspotTileServerLayer, uplinkHotspotsLineLayer, uplinkHotspotsCircleLayer, uplinkHotspotsHexLayer, uplinkChannelLayer } from './Layers.js';
+import { uplinkTileServerLayer, uplinkHotspotsLineLayer, uplinkHotspotsCircleLayer, uplinkHotspotsHexLayer, uplinkChannelLayer } from './Layers.js';
 import bbox from '@turf/bbox';
 import { get } from '../data/Rest'
 import { geoToH3, h3ToGeo, h3ToGeoBoundary } from "h3-js";
@@ -13,13 +14,15 @@ import useLocalStorageState from 'use-local-storage-state';
 import '../../css/app.css';
 import { useNavigate, useLocation } from "react-router-dom";
 
-const MAPBOX_TOKEN = process.env.PUBLIC_MAPBOX_KEY;
+// Open-source map style (no API key needed)
+const MAP_STYLE = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
+
 var selectedStateIdTile = null;
 var selectedStateIdChannel = null;
 const channel = socket.channel("h3:new")
 
 function Map(props) {
-    const [viewport, setViewport] = useState({
+    const [viewState, setViewState] = useState({
         latitude: props.startLatitude,
         longitude: props.startLongitude,
         zoom: 11,
@@ -27,6 +30,11 @@ function Map(props) {
         pitch: 0
     });
     const mapRef = useRef(null);
+    // Ref to synchronously track which hex was loaded by a user click.
+    // Unlike useState, refs update immediately and are available in closures
+    // without waiting for a re-render. This prevents the location useEffect
+    // from re-triggering simulateUplinkHexClick for a hex that onClick already loaded.
+    const clickedHexRef = useRef(null);
     const [uplinks, setUplinks] = useState(null);
     const [uplinkHotspotsData, setUplinkHotspotsData] = useState({ line: null, circle: null, hex: null });
     const [uplinkChannelData, setUplinkChannelData] = useState(null);
@@ -40,9 +48,18 @@ function Map(props) {
     const [initComplete, setInitComplete] = useState(false);
     const [lastPath, setLastPath] = useState(false);
     const [showHexPaneCloseButton, setShowHexPaneCloseButton] = useState(false);
+    const [hexGeoJson, setHexGeoJson] = useState(null);
 
     let navigate = useNavigate();
     const location = useLocation();
+
+    // Load hex data from Phoenix API (replaces Martin tile server)
+    React.useEffect(() => {
+        fetch('/api/v1/hexes')
+            .then(res => res.json())
+            .then(data => setHexGeoJson(data))
+            .catch(err => console.error('Failed to load hex data:', err));
+    }, []);
 
     React.useEffect(() => {
         if (!initComplete && location.pathname != lastPath) {
@@ -57,7 +74,7 @@ function Map(props) {
                     "type": "FeatureCollection",
                     "features": [...features]
                 }
-                // Update data 
+                // Update data
                 setUplinkChannelData(featureCollection)
             })
 
@@ -76,7 +93,12 @@ function Map(props) {
         else if (initComplete && location.pathname != lastPath) {
 
             setLastPath(location.pathname);
-            if (routerParams.hexId != null && routerParams.hexId != 'undefined') {
+            // Only simulate click for direct URL navigation (e.g. page load with /uplinks/hex/:id).
+            // Skip if the hex was already loaded by an onClick handler (avoids duplicate API calls
+            // and the infinite loop that occurs when rapidly clicking between two hexes).
+            // We use clickedHexRef (a synchronous ref) instead of hexId state because setState
+            // is async — the state value would be stale here and fail the guard.
+            if (routerParams.hexId != null && routerParams.hexId != 'undefined' && routerParams.hexId !== clickedHexRef.current) {
                 setTimeout(() => {
                     simulateUplinkHexClick()
                 }, 500)
@@ -87,6 +109,7 @@ function Map(props) {
 
     const onCloseHexPaneClick = () => {
         setShowHexPane(false);
+        clickedHexRef.current = null;
 
         clearSelectedHex();
         const hotspotLineFeatureCollection =
@@ -110,11 +133,12 @@ function Map(props) {
     }
 
     const clearSelectedHex = () => {
-        const map = mapRef.current.getMap();
+        const map = mapRef.current?.getMap();
+        if (!map) return;
         // unselect any currently selected hex on both hex layers
-        if (selectedStateIdTile !== null || selectedStateIdTile !== null) {
+        if (selectedStateIdTile !== null || selectedStateIdChannel !== null) {
             map.setFeatureState(
-                { source: 'uplink-tileserver', sourceLayer: 'public.h3_res9', id: selectedStateIdTile },
+                { source: 'uplink-tileserver', id: selectedStateIdTile },
                 { selected: true }
             );
             map.setFeatureState(
@@ -124,16 +148,17 @@ function Map(props) {
         }
     }
 
-    const simulateUplinkHexClick = event => {
-        const map = mapRef.current.getMap();
+    const simulateUplinkHexClick = () => {
+        const map = mapRef.current?.getMap();
+        if (!map) return;
 
         if (map.areTilesLoaded()) {
-            var features = map.querySourceFeatures('uplink-tileserver', { sourceLayer: 'public.h3_res9' })
+            var features = map.querySourceFeatures('uplink-tileserver')
             features.forEach(function (feature_i) {
                 if (feature_i.properties.id == routerParams.hexId) {
-                    feature_i.layer = { id: "public.h3_res9", layout: {}, source: "uplink-tileserver", sourceLayer: "public.h3_res9", type: "fill" }
-                    var event = { features: [feature_i] }
-                    onClick(event)
+                    feature_i.layer = { id: "public.h3_res9", layout: {}, source: "uplink-tileserver", type: "fill" }
+                    var syntheticEvent = { features: [feature_i] }
+                    onClick(syntheticEvent)
                 }
             });
         }
@@ -146,8 +171,8 @@ function Map(props) {
         get("uplinks/hex/" + h3_index)
             .then(res => {
                 if (res.status == 429) {
-                    alert("Too many requests, take a break");
-                    return Promise.reject("Try again in a minute")
+                    console.warn("Rate limited — too many requests. Try again in a moment.");
+                    return Promise.reject("rate_limited")
                 }
                 else
                     return res
@@ -220,17 +245,23 @@ function Map(props) {
                 setUplinkHotspotsData({ line: hotspotLineFeatureCollection, circle: hotspotCircleFeatureCollection, hex: hotspotHexFeatureCollection })
             })
             .catch(err => {
-                alert(err)
+                if (err !== "rate_limited") {
+                    console.error("Failed to load hex data:", err);
+                }
             })
     }
 
-    const onClick = event => {
+    const onClick = useCallback(event => {
         const features = event.features;
-        const map = mapRef.current.getMap();
+        const map = mapRef.current?.getMap();
+        if (!map) return;
         setShowHexPaneCloseButton(false);
         if (features) {
             features.forEach(feature => {
                 if (feature.layer.id == "public.h3_res9") {
+                    // Mark this hex as clicked synchronously BEFORE navigate(),
+                    // so the location useEffect knows onClick already handled it.
+                    clickedHexRef.current = feature.properties.id;
                     navigate("/uplinks/hex/" + feature.properties.id);
                     // set hex data for info pane
                     setBestRssi(feature.properties.best_rssi);
@@ -242,7 +273,7 @@ function Map(props) {
                     // unselect any currently selected hex on both hex layers
                     if (selectedStateIdTile !== null || selectedStateIdTile !== null) {
                         map.setFeatureState(
-                            { source: 'uplink-tileserver', sourceLayer: 'public.h3_res9', id: selectedStateIdTile },
+                            { source: 'uplink-tileserver', id: selectedStateIdTile },
                             { selected: true }
                         );
                         map.setFeatureState(
@@ -252,12 +283,15 @@ function Map(props) {
                     }
                     selectedStateIdTile = feature.id;
                     map.setFeatureState(
-                        { source: 'uplink-tileserver', sourceLayer: 'public.h3_res9', id: selectedStateIdTile },
+                        { source: 'uplink-tileserver', id: selectedStateIdTile },
                         { selected: false }
                     );
                     setTimeout(() => { setShowHexPaneCloseButton(true); }, 1000)
                 }
                 else if (feature.layer.id == "uplinkChannelLayer") {
+                    // Mark this hex as clicked synchronously BEFORE navigate(),
+                    // so the location useEffect knows onClick already handled it.
+                    clickedHexRef.current = feature.properties.id_string;
                     navigate("/uplinks/hex/" + feature.properties.id_string);
                     // set hex data for info pane
                     setBestRssi(feature.properties.best_rssi);
@@ -273,7 +307,7 @@ function Map(props) {
                             { selected: true }
                         );
                         map.setFeatureState(
-                            { source: 'uplink-tileserver', sourceLayer: 'public.h3_res9', id: selectedStateIdTile },
+                            { source: 'uplink-tileserver', id: selectedStateIdTile },
                             { selected: true }
                         );
                     }
@@ -283,59 +317,41 @@ function Map(props) {
                         { selected: false }
                     );
 
-                    // calculate the bounding box of the feature
+                    // fly to the clicked feature using native map.fitBounds
                     const [minLng, minLat, maxLng, maxLat] = bbox(feature);
-                    // construct a viewport instance from the current state
-                    const vp = new WebMercatorViewport(viewport);
-                    var { longitude, latitude } = vp.fitBounds(
-                        [
-                            [minLng, minLat],
-                            [maxLng, maxLat]
-                        ],
-                        {
-                            padding: 40
-                        }
+                    map.fitBounds(
+                        [[minLng, minLat], [maxLng, maxLat]],
+                        { padding: 40, duration: 700 }
                     );
 
-                    setViewport({
-                        ...viewport,
-                        longitude,
-                        latitude,
-                        transitionInterpolator: new LinearInterpolator({
-                            around: [event.offsetCenter.x, event.offsetCenter.y]
-                        }),
-                        transitionDuration: 700
-                    });
                     setTimeout(() => { setShowHexPaneCloseButton(true); }, 1000)
                 }
             });
         }
-    };
+    }, []);
+
+    const interactiveLayerIds = ['public.h3_res9', 'uplinkChannelLayer'];
 
     return (
         <div className='map-container'>
             <MapGL
-                {...viewport}
-                width="100vw"
-                height="100vh"
-                mapStyle="mapbox://styles/petermain/ckmwdn50a1ebk17o3h5e6wwui"
+                {...viewState}
+                onMove={evt => setViewState(evt.viewState)}
+                style={{ width: "100vw", height: "100vh" }}
+                mapStyle={MAP_STYLE}
                 onClick={onClick}
-                onViewportChange={setViewport}
                 ref={mapRef}
-                mapboxApiAccessToken={MAPBOX_TOKEN}
+                interactiveLayerIds={interactiveLayerIds}
             >
                 <GeolocateControl
                     positionOptions={{ enableHighAccuracy: true }}
-                    fitBoundsOptions={{ maxZoom: viewport.zoom }}
+                    fitBoundsOptions={{ maxZoom: viewState.zoom }}
                     trackUserLocation={true}
-                    disabledLabel="Unable to locate"
-                    className="geolocate-button"
+                    position="top-right"
                 />
-                <Source id="hotspot-tileserver" type="vector" url={"https://emt.heliumgeek.net/v1/hg.gateways-rewarded-r8.hexes.json"}>
-                    <Layer {...hotspotTileServerLayer} source-layer={"hg.gateways-rewarded-r8.hexes"} />
-                </Source>
-                <Source id="uplink-tileserver" type="vector" url={"https://mappers-tileserver.helium.wtf/public.h3_res9.json"}>
-                    <Layer {...uplinkTileServerLayer} source-layer={"public.h3_res9"} />
+                <NavigationControl position="top-right" />
+                <Source id="uplink-tileserver" type="geojson" data={hexGeoJson}>
+                    <Layer {...uplinkTileServerLayer} />
                 </Source>
                 <Source id="uplink-channel" type="geojson" data={uplinkChannelData}>
                     <Layer {...uplinkChannelLayer} />

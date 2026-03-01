@@ -12,7 +12,7 @@ defmodule MappersWeb.Router do
 
   pipeline :api do
     plug :accepts, ["json"]
-    plug MappersWeb.Plug.RateLimit, ["api_actions", 60]
+    plug MappersWeb.Plug.RateLimit, ["api_actions", 300]
   end
 
   pipeline :allow_cors do
@@ -33,6 +33,7 @@ defmodule MappersWeb.Router do
 
     post "/ingest/uplink", API.V1.IngestUplinkController, :create
     get "/uplinks/hex/:h3_index", API.V1.UplinkController, :get_uplinks
+    get "/hexes", API.V1.HexController, :index
   end
 
   scope "/api/v1", MappersWeb do

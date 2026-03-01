@@ -1,42 +1,28 @@
 {
   "repository": {},
-  "description": " ",
+  "description": "Buoy.Fish Coverage Mapper frontend assets",
   "license": "MIT",
   "scripts": {
-    "deploy": "webpack --mode production",
-    "watch": "webpack --mode development --watch"
+    "deploy": "node build.mjs --deploy",
+    "watch": "node build.mjs --watch"
   },
   "dependencies": {
     "@turf/bbox": "^6.3.0",
     "classnames": "^2.3.1",
     "date-fns": "^2.22.1",
-    "dotenv": "^8.2.0",
     "geojson": "^0.5.0",
     "geojson2h3": "^1.1.1",
     "h3-js": "^3.7.2",
-    "mapbox-gl": "^2.2.0",
+    "maplibre-gl": "^4.7.1",
     "phoenix": "file:../deps/phoenix",
     "phoenix_html": "file:../deps/phoenix_html",
     "react": "^17.0.2",
     "react-dom": "^17.0.2",
-    "react-map-gl": "^6.1.15",
+    "react-map-gl": "^7.1.7",
     "react-router-dom": "6",
     "use-local-storage-state": "^10.0.0"
   },
   "devDependencies": {
-    "@babel/core": "^7.0.0",
-    "@babel/preset-env": "^7.0.0",
-    "@babel/preset-react": "^7.13.13",
-    "babel-loader": "^8.0.0",
-    "copy-webpack-plugin": "^5.1.1",
-    "css-loader": "^3.4.2",
-    "hard-source-webpack-plugin": "^0.13.1",
-    "mini-css-extract-plugin": "^0.9.0",
-    "optimize-css-assets-webpack-plugin": "^5.0.1",
-    "sass": "^1.51.0",
-    "sass-loader": "^8.0.2",
-    "terser-webpack-plugin": "^2.3.2",
-    "webpack": "4.41.5",
-    "webpack-cli": "^3.3.2"
+    "esbuild": "^0.25.0"
   }
 }

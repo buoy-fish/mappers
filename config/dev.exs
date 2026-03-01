@@ -1,11 +1,12 @@
-use Mix.Config
+import Config
 
-# Configure your database
+# Configure your database (all configurable via .env.development)
 config :mappers, Mappers.Repo,
-  username: "postgres",
-  password: "postgres",
-  database: "mappers_dev",
-  hostname: "localhost",
+  username: System.get_env("DB_USER") || "postgres",
+  password: System.get_env("DB_PASSWORD") || "postgres",
+  database: System.get_env("DB_NAME") || "mappers_dev",
+  hostname: System.get_env("DB_HOST") || "localhost",
+  port: String.to_integer(System.get_env("DB_PORT") || "5432"),
   show_sensitive_data_on_connection_error: true,
   pool_size: 30
 
@@ -13,19 +14,17 @@ config :mappers, Mappers.Repo,
 # debugging and code reloading.
 #
 # The watchers configuration can be used to run external
-# watchers to your application. For example, we use it
-# with webpack to recompile .js and .css sources.
+# watchers to your application. We use esbuild for fast
+# JS/CSS bundling with zero vulnerabilities.
 config :mappers, MappersWeb.Endpoint,
-  http: [port: 4000],
+  http: [port: String.to_integer(System.get_env("PORT") || "4002")],
   debug_errors: true,
   code_reloader: true,
   check_origin: false,
   watchers: [
     node: [
-      "node_modules/webpack/bin/webpack.js",
-      "--mode",
-      "development",
-      "--watch-stdin",
+      "build.mjs",
+      "--watch",
       cd: Path.expand("../assets", __DIR__)
     ]
   ]

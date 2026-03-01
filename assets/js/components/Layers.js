@@ -10,11 +10,11 @@ export const uplinkTileServerLayer = {
                 ['linear'],
                 ['get', 'best_rssi'],
                 -120,
-                'rgba(38,251,202,0.1)',
+                'rgba(255,152,0,0.15)',
                 -100,
-                'rgba(38,251,202,0.45)',
+                'rgba(255,152,0,0.5)',
                 -80,
-                'rgba(38,251,202,0.8)']
+                'rgba(255,152,0,0.85)']
             ,
             '#b67ffe'
         ],
@@ -23,7 +23,7 @@ export const uplinkTileServerLayer = {
             'case',
             ['boolean',
                 ['feature-state', 'selected'], true],
-            'rgba(38,251,202,0.45)',
+            'rgba(255,152,0,0.5)',
             '#ffffff'
         ]
     }
@@ -82,11 +82,11 @@ export const uplinkChannelLayer = {
                 ['linear'],
                 ['get', 'best_rssi'],
                 -120,
-                'rgba(38,251,202,0.1)',
+                'rgba(255,152,0,0.15)',
                 -100,
-                'rgba(38,251,202,0.45)',
+                'rgba(255,152,0,0.5)',
                 -80,
-                'rgba(38,251,202,0.8)']
+                'rgba(255,152,0,0.85)']
             ,
             '#b67ffe'
         ],
@@ -95,7 +95,7 @@ export const uplinkChannelLayer = {
             'case',
             ['boolean',
                 ['feature-state', 'selected'], true],
-            'rgba(38,251,202,0.45)',
+            'rgba(255,152,0,0.5)',
             '#ffffff'
         ]
     }

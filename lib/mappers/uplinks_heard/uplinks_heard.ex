@@ -2,8 +2,6 @@ defmodule Mappers.UplinksHeard do
   alias Mappers.Repo
   alias Mappers.UplinksHeards.UplinkHeard
 
-  @max_concurrency(3)
-
   def create(hotspots, uplink_id) do
     uplinks_heard =
       Enum.map(hotspots, fn hotspot ->

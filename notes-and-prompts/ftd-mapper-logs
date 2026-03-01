@@ -1,0 +1,969 @@
+{
+    "object": {
+        "latitude": 43.736,
+        "longitude": -65.8395,
+        "accuracy": 8,
+        "altitude": 2
+    },
+    "adr": true,
+    "confirmed": true,
+    "data": "MENEFkAGVQNxOQ==",
+    "deduplicationId": "61bf0a6e-a131-45e7-bb67-fb94a38c95c2",
+    "devAddr": "78000190",
+    "deviceInfo": {
+        "tenantId": "e1d293fb-6dc5-4214-a23a-94696f17f82f",
+        "tenantName": "buoy",
+        "applicationId": "e12063f6-8fcb-4fc6-8045-41cb880ce55c",
+        "applicationName": "Adeunis FTD Mappers",
+        "deviceProfileId": "5aafaf97-e079-469e-ae07-0a121ca14ff2",
+        "deviceProfileName": "Adeunis Panga Mappers",
+        "deviceName": "Adeunis #1 Panga Mapper (2C95)",
+        "devEui": "0018b20000022c95",
+        "deviceClassEnabled": "CLASS_A",
+        "tags": {}
+    },
+    "dr": 0,
+    "fCnt": 182,
+    "fPort": 1,
+    "rxInfo": [
+        {
+            "gatewayId": "acd9b11959a44ab3",
+            "uplinkId": 41855,
+            "gwTime": "2025-10-10T12:59:37.183+00:00",
+            "rssi": -36,
+            "snr": 12,
+            "context": "D3dpiQ==",
+            "metadata": {
+                "network": "helium_iot",
+                "gateway_id": "13H54UfBmgVcLujko4ZUo3UiAspkEvv2fzS4bLDtjPyT5ecPfXJ",
+                "regi": "US915",
+                "gateway_name": "damp-magenta-turtle"
+            },
+            "crcStatus": "CRC_OK",
+            "time": "2025-10-10T12:59:37.183+00:00"
+        }
+    ],
+    "time": "2025-10-10T12:59:37.183+00:00",
+    "txInfo": {
+        "frequency": 905100000,
+        "modulation": {
+            "lora": {
+                "bandwidth": 125000,
+                "spreadingFactor": 10,
+                "codeRate": "CR_4_5"
+            }
+        }
+    }
+}
+{
+    "object": {
+        "latitude": 43.736,
+        "longitude": -65.8395,
+        "accuracy": 8,
+        "altitude": 2
+    },
+    "adr": true,
+    "confirmed": true,
+    "data": "EENEFiAGVQNxOA==",
+    "deduplicationId": "8c334c01-97c6-46ff-b88e-2fe2d389dbdc",
+    "devAddr": "78000190",
+    "deviceInfo": {
+        "tenantId": "e1d293fb-6dc5-4214-a23a-94696f17f82f",
+        "tenantName": "buoy",
+        "applicationId": "e12063f6-8fcb-4fc6-8045-41cb880ce55c",
+        "applicationName": "Adeunis FTD Mappers",
+        "deviceProfileId": "5aafaf97-e079-469e-ae07-0a121ca14ff2",
+        "deviceProfileName": "Adeunis Panga Mappers",
+        "deviceName": "Adeunis #1 Panga Mapper (2C95)",
+        "devEui": "0018b20000022c95",
+        "deviceClassEnabled": "CLASS_A",
+        "tags": {}
+    },
+    "dr": 3,
+    "fCnt": 184,
+    "fPort": 1,
+    "rxInfo": [
+        {
+            "gatewayId": "acd9b11959a44ab3",
+            "uplinkId": 39342,
+            "gwTime": "2025-10-10T13:07:33.534+00:00",
+            "rssi": -49,
+            "snr": 13.2,
+            "context": "K9v87w==",
+            "metadata": {
+                "network": "helium_iot",
+                "regi": "US915",
+                "gateway_id": "13H54UfBmgVcLujko4ZUo3UiAspkEvv2fzS4bLDtjPyT5ecPfXJ",
+                "gateway_name": "damp-magenta-turtle"
+            },
+            "crcStatus": "CRC_OK",
+            "time": "2025-10-10T13:07:33.534+00:00"
+        }
+    ],
+    "time": "2025-10-10T13:07:33.534+00:00",
+    "txInfo": {
+        "frequency": 904500000,
+        "modulation": {
+            "lora": {
+                "bandwidth": 125000,
+                "spreadingFactor": 7,
+                "codeRate": "CR_4_5"
+            }
+        }
+    }
+}
+{
+    "object": {
+        "latitude": 43.736,
+        "longitude": -65.8395,
+        "accuracy": 8,
+        "altitude": 2
+    },
+    "adr": true,
+    "confirmed": true,
+    "data": "EENEFmAGVQNxNg==",
+    "deduplicationId": "3d34ea70-3ccb-42b1-8a97-e4e8848a145a",
+    "devAddr": "78000192",
+    "deviceInfo": {
+        "tenantId": "e1d293fb-6dc5-4214-a23a-94696f17f82f",
+        "tenantName": "buoy",
+        "applicationId": "e12063f6-8fcb-4fc6-8045-41cb880ce55c",
+        "applicationName": "Adeunis FTD Mappers",
+        "deviceProfileId": "5aafaf97-e079-469e-ae07-0a121ca14ff2",
+        "deviceProfileName": "Adeunis Panga Mappers",
+        "deviceName": "Adeunis #3 Panga Mapper (0E95)",
+        "devEui": "0018b20000020e95",
+        "deviceClassEnabled": "CLASS_A",
+        "tags": {}
+    },
+    "dr": 0,
+    "fCnt": 162,
+    "fPort": 1,
+    "rxInfo": [
+        {
+            "gatewayId": "acd9b11959a44ab3",
+            "uplinkId": 62716,
+            "gwTime": "2025-10-10T13:09:21.532+00:00",
+            "rssi": -39,
+            "snr": 10.8,
+            "context": "Mkv83Q==",
+            "metadata": {
+                "gateway_id": "13H54UfBmgVcLujko4ZUo3UiAspkEvv2fzS4bLDtjPyT5ecPfXJ",
+                "gateway_name": "damp-magenta-turtle",
+                "regi": "US915",
+                "network": "helium_iot"
+            },
+            "crcStatus": "CRC_OK",
+            "time": "2025-10-10T13:09:21.532+00:00"
+        }
+    ],
+    "time": "2025-10-10T13:09:21.532+00:00",
+    "txInfo": {
+        "frequency": 904900000,
+        "modulation": {
+            "lora": {
+                "bandwidth": 125000,
+                "spreadingFactor": 10,
+                "codeRate": "CR_4_5"
+            }
+        }
+    }
+}
+{
+    "object": {
+        "latitude": 43.736,
+        "longitude": -65.8395,
+        "accuracy": 8,
+        "altitude": 2
+    },
+    "adr": true,
+    "confirmed": true,
+    "data": "MENEFkAGVQNxNA==",
+    "deduplicationId": "1b7686f6-9518-43b4-a404-209bb19874ff",
+    "devAddr": "78000190",
+    "deviceInfo": {
+        "tenantId": "e1d293fb-6dc5-4214-a23a-94696f17f82f",
+        "tenantName": "buoy",
+        "applicationId": "e12063f6-8fcb-4fc6-8045-41cb880ce55c",
+        "applicationName": "Adeunis FTD Mappers",
+        "deviceProfileId": "5aafaf97-e079-469e-ae07-0a121ca14ff2",
+        "deviceProfileName": "Adeunis Panga Mappers",
+        "deviceName": "Adeunis #1 Panga Mapper (2C95)",
+        "devEui": "0018b20000022c95",
+        "deviceClassEnabled": "CLASS_A",
+        "tags": {}
+    },
+    "dr": 3,
+    "fCnt": 186,
+    "fPort": 1,
+    "rxInfo": [
+        {
+            "gatewayId": "acd9b11959a44ab3",
+            "uplinkId": 19651,
+            "gwTime": "2025-10-10T13:12:14.578+00:00",
+            "rssi": -37,
+            "snr": 13.8,
+            "context": "PJxrcw==",
+            "metadata": {
+                "network": "helium_iot",
+                "gateway_id": "13H54UfBmgVcLujko4ZUo3UiAspkEvv2fzS4bLDtjPyT5ecPfXJ",
+                "regi": "US915",
+                "gateway_name": "damp-magenta-turtle"
+            },
+            "crcStatus": "CRC_OK",
+            "time": "2025-10-10T13:12:14.578+00:00"
+        }
+    ],
+    "time": "2025-10-10T13:12:14.578+00:00",
+    "txInfo": {
+        "frequency": 905300000,
+        "modulation": {
+            "lora": {
+                "bandwidth": 125000,
+                "spreadingFactor": 7,
+                "codeRate": "CR_4_5"
+            }
+        }
+    }
+}
+{
+    "object": {
+        "latitude": 43.736,
+        "longitude": -65.8395,
+        "accuracy": 8,
+        "altitude": 2
+    },
+    "adr": true,
+    "confirmed": true,
+    "data": "EENEFjAGVQNxOA==",
+    "deduplicationId": "19536253-bb3e-4d23-a10f-8e9e7f524bb9",
+    "devAddr": "78000190",
+    "deviceInfo": {
+        "tenantId": "e1d293fb-6dc5-4214-a23a-94696f17f82f",
+        "tenantName": "buoy",
+        "applicationId": "e12063f6-8fcb-4fc6-8045-41cb880ce55c",
+        "applicationName": "Adeunis FTD Mappers",
+        "deviceProfileId": "5aafaf97-e079-469e-ae07-0a121ca14ff2",
+        "deviceProfileName": "Adeunis Panga Mappers",
+        "deviceName": "Adeunis #1 Panga Mapper (2C95)",
+        "devEui": "0018b20000022c95",
+        "deviceClassEnabled": "CLASS_A",
+        "tags": {}
+    },
+    "dr": 3,
+    "fCnt": 188,
+    "fPort": 1,
+    "rxInfo": [
+        {
+            "gatewayId": "acd9b11959a44ab3",
+            "uplinkId": 2171,
+            "gwTime": "2025-10-10T13:17:33.482+00:00",
+            "rssi": -46,
+            "snr": 13.2,
+            "context": "T56Jog==",
+            "metadata": {
+                "gateway_id": "13H54UfBmgVcLujko4ZUo3UiAspkEvv2fzS4bLDtjPyT5ecPfXJ",
+                "regi": "US915",
+                "gateway_name": "damp-magenta-turtle",
+                "network": "helium_iot"
+            },
+            "crcStatus": "CRC_OK",
+            "time": "2025-10-10T13:17:33.482+00:00"
+        }
+    ],
+    "time": "2025-10-10T13:17:33.482+00:00",
+    "txInfo": {
+        "frequency": 904900000,
+        "modulation": {
+            "lora": {
+                "bandwidth": 125000,
+                "spreadingFactor": 7,
+                "codeRate": "CR_4_5"
+            }
+        }
+    }
+}
+{
+    "object": {
+        "latitude": 43.736,
+        "longitude": -65.8395,
+        "accuracy": 8,
+        "altitude": 2
+    },
+    "adr": true,
+    "confirmed": true,
+    "data": "EENEFhAGVQNxNw==",
+    "deduplicationId": "2793ad13-931e-41dc-8b97-0df2c4ca95c8",
+    "devAddr": "78000192",
+    "deviceInfo": {
+        "tenantId": "e1d293fb-6dc5-4214-a23a-94696f17f82f",
+        "tenantName": "buoy",
+        "applicationId": "e12063f6-8fcb-4fc6-8045-41cb880ce55c",
+        "applicationName": "Adeunis FTD Mappers",
+        "deviceProfileId": "5aafaf97-e079-469e-ae07-0a121ca14ff2",
+        "deviceProfileName": "Adeunis Panga Mappers",
+        "deviceName": "Adeunis #3 Panga Mapper (0E95)",
+        "devEui": "0018b20000020e95",
+        "deviceClassEnabled": "CLASS_A",
+        "tags": {}
+    },
+    "dr": 0,
+    "fCnt": 164,
+    "fPort": 1,
+    "rxInfo": [
+        {
+            "gatewayId": "acd9b11959a44ab3",
+            "uplinkId": 17647,
+            "gwTime": "2025-10-10T13:19:14.497+00:00",
+            "rssi": -39,
+            "snr": 11.2,
+            "context": "VaPZqw==",
+            "metadata": {
+                "gateway_id": "13H54UfBmgVcLujko4ZUo3UiAspkEvv2fzS4bLDtjPyT5ecPfXJ",
+                "regi": "US915",
+                "network": "helium_iot",
+                "gateway_name": "damp-magenta-turtle"
+            },
+            "crcStatus": "CRC_OK",
+            "time": "2025-10-10T13:19:14.497+00:00"
+        }
+    ],
+    "time": "2025-10-10T13:19:14.497+00:00",
+    "txInfo": {
+        "frequency": 904100000,
+        "modulation": {
+            "lora": {
+                "bandwidth": 125000,
+                "spreadingFactor": 10,
+                "codeRate": "CR_4_5"
+            }
+        }
+    }
+}
+{
+    "object": {
+        "latitude": 43.736,
+        "longitude": -65.8395,
+        "accuracy": 8,
+        "altitude": 2
+    },
+    "adr": true,
+    "confirmed": true,
+    "data": "EENEFjAGVQNxNg==",
+    "deduplicationId": "26dad3ad-9fcc-4103-acb3-af2477153219",
+    "devAddr": "78000190",
+    "deviceInfo": {
+        "tenantId": "e1d293fb-6dc5-4214-a23a-94696f17f82f",
+        "tenantName": "buoy",
+        "applicationId": "e12063f6-8fcb-4fc6-8045-41cb880ce55c",
+        "applicationName": "Adeunis FTD Mappers",
+        "deviceProfileId": "5aafaf97-e079-469e-ae07-0a121ca14ff2",
+        "deviceProfileName": "Adeunis Panga Mappers",
+        "deviceName": "Adeunis #1 Panga Mapper (2C95)",
+        "devEui": "0018b20000022c95",
+        "deviceClassEnabled": "CLASS_A",
+        "tags": {}
+    },
+    "dr": 3,
+    "fCnt": 190,
+    "fPort": 1,
+    "rxInfo": [
+        {
+            "gatewayId": "acd9b11959a44ab3",
+            "uplinkId": 62212,
+            "gwTime": "2025-10-10T13:27:33.441+00:00",
+            "rssi": -50,
+            "snr": 13.5,
+            "context": "c2E5QQ==",
+            "metadata": {
+                "gateway_name": "damp-magenta-turtle",
+                "network": "helium_iot",
+                "gateway_id": "13H54UfBmgVcLujko4ZUo3UiAspkEvv2fzS4bLDtjPyT5ecPfXJ",
+                "regi": "US915"
+            },
+            "crcStatus": "CRC_OK",
+            "time": "2025-10-10T13:27:33.441+00:00"
+        }
+    ],
+    "time": "2025-10-10T13:27:33.441+00:00",
+    "txInfo": {
+        "frequency": 904700000,
+        "modulation": {
+            "lora": {
+                "bandwidth": 125000,
+                "spreadingFactor": 7,
+                "codeRate": "CR_4_5"
+            }
+        }
+    }
+}
+{
+    "object": {
+        "latitude": 43.736,
+        "longitude": -65.8395,
+        "accuracy": 8,
+        "altitude": 2
+    },
+    "adr": true,
+    "confirmed": true,
+    "data": "EENEFjAGVQNxNw==",
+    "deduplicationId": "601f5f15-7d7d-4fc1-8736-eb9762b6a043",
+    "devAddr": "78000192",
+    "deviceInfo": {
+        "tenantId": "e1d293fb-6dc5-4214-a23a-94696f17f82f",
+        "tenantName": "buoy",
+        "applicationId": "e12063f6-8fcb-4fc6-8045-41cb880ce55c",
+        "applicationName": "Adeunis FTD Mappers",
+        "deviceProfileId": "5aafaf97-e079-469e-ae07-0a121ca14ff2",
+        "deviceProfileName": "Adeunis Panga Mappers",
+        "deviceName": "Adeunis #3 Panga Mapper (0E95)",
+        "devEui": "0018b20000020e95",
+        "deviceClassEnabled": "CLASS_A",
+        "tags": {}
+    },
+    "dr": 3,
+    "fCnt": 166,
+    "fPort": 1,
+    "rxInfo": [
+        {
+            "gatewayId": "acd9b11959a44ab3",
+            "uplinkId": 31948,
+            "gwTime": "2025-10-10T13:29:06.165+00:00",
+            "rssi": -43,
+            "snr": 13,
+            "context": "eOgLpw==",
+            "metadata": {
+                "network": "helium_iot",
+                "regi": "US915",
+                "gateway_id": "13H54UfBmgVcLujko4ZUo3UiAspkEvv2fzS4bLDtjPyT5ecPfXJ",
+                "gateway_name": "damp-magenta-turtle"
+            },
+            "crcStatus": "CRC_OK",
+            "time": "2025-10-10T13:29:06.165+00:00"
+        }
+    ],
+    "time": "2025-10-10T13:29:06.165+00:00",
+    "txInfo": {
+        "frequency": 904500000,
+        "modulation": {
+            "lora": {
+                "bandwidth": 125000,
+                "spreadingFactor": 7,
+                "codeRate": "CR_4_5"
+            }
+        }
+    }
+}
+{
+    "object": {
+        "latitude": 43.736,
+        "longitude": -65.8395,
+        "accuracy": 8,
+        "altitude": 2
+    },
+    "adr": true,
+    "confirmed": true,
+    "data": "EENEFiAGVQNxOA==",
+    "deduplicationId": "127fb4b4-8e24-4c65-b7a4-fdb4bccce049",
+    "devAddr": "78000190",
+    "deviceInfo": {
+        "tenantId": "e1d293fb-6dc5-4214-a23a-94696f17f82f",
+        "tenantName": "buoy",
+        "applicationId": "e12063f6-8fcb-4fc6-8045-41cb880ce55c",
+        "applicationName": "Adeunis FTD Mappers",
+        "deviceProfileId": "5aafaf97-e079-469e-ae07-0a121ca14ff2",
+        "deviceProfileName": "Adeunis Panga Mappers",
+        "deviceName": "Adeunis #1 Panga Mapper (2C95)",
+        "devEui": "0018b20000022c95",
+        "deviceClassEnabled": "CLASS_A",
+        "tags": {}
+    },
+    "dr": 3,
+    "fCnt": 192,
+    "fPort": 1,
+    "rxInfo": [
+        {
+            "gatewayId": "acd9b11959a44ab3",
+            "uplinkId": 565,
+            "gwTime": "2025-10-10T13:37:33.403+00:00",
+            "rssi": -44,
+            "snr": 10.2,
+            "context": "lyPONg==",
+            "metadata": {
+                "network": "helium_iot",
+                "gateway_id": "13H54UfBmgVcLujko4ZUo3UiAspkEvv2fzS4bLDtjPyT5ecPfXJ",
+                "regi": "US915",
+                "gateway_name": "damp-magenta-turtle"
+            },
+            "crcStatus": "CRC_OK",
+            "time": "2025-10-10T13:37:33.403+00:00"
+        }
+    ],
+    "time": "2025-10-10T13:37:33.403+00:00",
+    "txInfo": {
+        "frequency": 904300000,
+        "modulation": {
+            "lora": {
+                "bandwidth": 125000,
+                "spreadingFactor": 7,
+                "codeRate": "CR_4_5"
+            }
+        }
+    }
+}
+{
+    "object": {
+        "latitude": 43.736,
+        "longitude": -65.83933333333333,
+        "accuracy": 8,
+        "altitude": 2
+    },
+    "adr": true,
+    "confirmed": true,
+    "data": "EENEFjAGVQNhOA==",
+    "deduplicationId": "8976055d-2cd6-413c-a151-8f79d56b2235",
+    "devAddr": "78000190",
+    "deviceInfo": {
+        "tenantId": "e1d293fb-6dc5-4214-a23a-94696f17f82f",
+        "tenantName": "buoy",
+        "applicationId": "e12063f6-8fcb-4fc6-8045-41cb880ce55c",
+        "applicationName": "Adeunis FTD Mappers",
+        "deviceProfileId": "5aafaf97-e079-469e-ae07-0a121ca14ff2",
+        "deviceProfileName": "Adeunis Panga Mappers",
+        "deviceName": "Adeunis #1 Panga Mapper (2C95)",
+        "devEui": "0018b20000022c95",
+        "deviceClassEnabled": "CLASS_A",
+        "tags": {}
+    },
+    "dr": 3,
+    "fCnt": 194,
+    "fPort": 1,
+    "rxInfo": [
+        {
+            "gatewayId": "acd9b11959a44ab3",
+            "uplinkId": 60388,
+            "gwTime": "2025-10-10T13:47:33.358+00:00",
+            "rssi": -39,
+            "snr": 12.8,
+            "context": "uuaGAw==",
+            "metadata": {
+                "gateway_id": "13H54UfBmgVcLujko4ZUo3UiAspkEvv2fzS4bLDtjPyT5ecPfXJ",
+                "regi": "US915",
+                "network": "helium_iot",
+                "gateway_name": "damp-magenta-turtle"
+            },
+            "crcStatus": "CRC_OK",
+            "time": "2025-10-10T13:47:33.358+00:00"
+        }
+    ],
+    "time": "2025-10-10T13:47:33.358+00:00",
+    "txInfo": {
+        "frequency": 904500000,
+        "modulation": {
+            "lora": {
+                "bandwidth": 125000,
+                "spreadingFactor": 7,
+                "codeRate": "CR_4_5"
+            }
+        }
+    }
+}
+{
+    "object": {
+        "latitude": 43.736,
+        "longitude": -65.8395,
+        "accuracy": 8,
+        "altitude": 2
+    },
+    "adr": true,
+    "confirmed": true,
+    "data": "EENEFhAGVQNxOg==",
+    "deduplicationId": "d92ea20d-d10a-4230-a0cc-c894a4c2408d",
+    "devAddr": "78000192",
+    "deviceInfo": {
+        "tenantId": "e1d293fb-6dc5-4214-a23a-94696f17f82f",
+        "tenantName": "buoy",
+        "applicationId": "e12063f6-8fcb-4fc6-8045-41cb880ce55c",
+        "applicationName": "Adeunis FTD Mappers",
+        "deviceProfileId": "5aafaf97-e079-469e-ae07-0a121ca14ff2",
+        "deviceProfileName": "Adeunis Panga Mappers",
+        "deviceName": "Adeunis #3 Panga Mapper (0E95)",
+        "devEui": "0018b20000020e95",
+        "deviceClassEnabled": "CLASS_A",
+        "tags": {}
+    },
+    "dr": 0,
+    "fCnt": 170,
+    "fPort": 1,
+    "rxInfo": [
+        {
+            "gatewayId": "acd9b11959a44ab3",
+            "uplinkId": 9882,
+            "gwTime": "2025-10-10T13:49:38.430+00:00",
+            "rssi": -36,
+            "snr": 10.8,
+            "context": "wlrdTA==",
+            "metadata": {
+                "gateway_id": "13H54UfBmgVcLujko4ZUo3UiAspkEvv2fzS4bLDtjPyT5ecPfXJ",
+                "gateway_name": "damp-magenta-turtle",
+                "regi": "US915",
+                "network": "helium_iot"
+            },
+            "crcStatus": "CRC_OK",
+            "time": "2025-10-10T13:49:38.430+00:00"
+        }
+    ],
+    "time": "2025-10-10T13:49:38.430+00:00",
+    "txInfo": {
+        "frequency": 904100000,
+        "modulation": {
+            "lora": {
+                "bandwidth": 125000,
+                "spreadingFactor": 10,
+                "codeRate": "CR_4_5"
+            }
+        }
+    }
+}
+{
+    "object": {
+        "latitude": 43.736,
+        "longitude": -65.8395,
+        "accuracy": 8,
+        "altitude": 2
+    },
+    "adr": true,
+    "confirmed": true,
+    "data": "EENEFiAGVQNxOQ==",
+    "deduplicationId": "2ed0554a-a639-4baa-b993-67615ee4207d",
+    "devAddr": "78000190",
+    "deviceInfo": {
+        "tenantId": "e1d293fb-6dc5-4214-a23a-94696f17f82f",
+        "tenantName": "buoy",
+        "applicationId": "e12063f6-8fcb-4fc6-8045-41cb880ce55c",
+        "applicationName": "Adeunis FTD Mappers",
+        "deviceProfileId": "5aafaf97-e079-469e-ae07-0a121ca14ff2",
+        "deviceProfileName": "Adeunis Panga Mappers",
+        "deviceName": "Adeunis #1 Panga Mapper (2C95)",
+        "devEui": "0018b20000022c95",
+        "deviceClassEnabled": "CLASS_A",
+        "tags": {}
+    },
+    "dr": 3,
+    "fCnt": 196,
+    "fPort": 1,
+    "rxInfo": [
+        {
+            "gatewayId": "acd9b11959a44ab3",
+            "uplinkId": 64492,
+            "gwTime": "2025-10-10T13:57:33.315+00:00",
+            "rssi": -43,
+            "snr": 13.8,
+            "context": "3qkakw==",
+            "metadata": {
+                "gateway_name": "damp-magenta-turtle",
+                "network": "helium_iot",
+                "regi": "US915",
+                "gateway_id": "13H54UfBmgVcLujko4ZUo3UiAspkEvv2fzS4bLDtjPyT5ecPfXJ"
+            },
+            "crcStatus": "CRC_OK",
+            "time": "2025-10-10T13:57:33.315+00:00"
+        }
+    ],
+    "time": "2025-10-10T13:57:33.315+00:00",
+    "txInfo": {
+        "frequency": 905100000,
+        "modulation": {
+            "lora": {
+                "bandwidth": 125000,
+                "spreadingFactor": 7,
+                "codeRate": "CR_4_5"
+            }
+        }
+    }
+}
+{
+    "object": {
+        "latitude": 43.736,
+        "longitude": -65.83916666666667,
+        "accuracy": 8,
+        "altitude": 2
+    },
+    "adr": true,
+    "confirmed": true,
+    "data": "EENEFgAGVQNROQ==",
+    "deduplicationId": "b38ab25e-55b9-452d-a7e5-ccfcab4fcec6",
+    "devAddr": "78000192",
+    "deviceInfo": {
+        "tenantId": "e1d293fb-6dc5-4214-a23a-94696f17f82f",
+        "tenantName": "buoy",
+        "applicationId": "e12063f6-8fcb-4fc6-8045-41cb880ce55c",
+        "applicationName": "Adeunis FTD Mappers",
+        "deviceProfileId": "5aafaf97-e079-469e-ae07-0a121ca14ff2",
+        "deviceProfileName": "Adeunis Panga Mappers",
+        "deviceName": "Adeunis #3 Panga Mapper (0E95)",
+        "devEui": "0018b20000020e95",
+        "deviceClassEnabled": "CLASS_A",
+        "tags": {}
+    },
+    "dr": 3,
+    "fCnt": 172,
+    "fPort": 1,
+    "rxInfo": [
+        {
+            "gatewayId": "acd9b11959a44ab3",
+            "uplinkId": 48458,
+            "gwTime": "2025-10-10T13:59:06.095+00:00",
+            "rssi": -42,
+            "snr": 10.2,
+            "context": "5DC4Pg==",
+            "metadata": {
+                "network": "helium_iot",
+                "regi": "US915",
+                "gateway_id": "13H54UfBmgVcLujko4ZUo3UiAspkEvv2fzS4bLDtjPyT5ecPfXJ",
+                "gateway_name": "damp-magenta-turtle"
+            },
+            "crcStatus": "CRC_OK",
+            "time": "2025-10-10T13:59:06.095+00:00"
+        }
+    ],
+    "time": "2025-10-10T13:59:06.095+00:00",
+    "txInfo": {
+        "frequency": 904300000,
+        "modulation": {
+            "lora": {
+                "bandwidth": 125000,
+                "spreadingFactor": 7,
+                "codeRate": "CR_4_5"
+            }
+        }
+    }
+}
+{
+    "object": {
+        "latitude": 43.736,
+        "longitude": -65.8395,
+        "accuracy": 8,
+        "altitude": 2
+    },
+    "adr": true,
+    "confirmed": true,
+    "data": "EENEFjAGVQNxNw==",
+    "deduplicationId": "2fd1e242-6b12-4a61-a7da-8272883abd23",
+    "devAddr": "78000190",
+    "deviceInfo": {
+        "tenantId": "e1d293fb-6dc5-4214-a23a-94696f17f82f",
+        "tenantName": "buoy",
+        "applicationId": "e12063f6-8fcb-4fc6-8045-41cb880ce55c",
+        "applicationName": "Adeunis FTD Mappers",
+        "deviceProfileId": "5aafaf97-e079-469e-ae07-0a121ca14ff2",
+        "deviceProfileName": "Adeunis Panga Mappers",
+        "deviceName": "Adeunis #1 Panga Mapper (2C95)",
+        "devEui": "0018b20000022c95",
+        "deviceClassEnabled": "CLASS_A",
+        "tags": {}
+    },
+    "dr": 3,
+    "fCnt": 198,
+    "fPort": 1,
+    "rxInfo": [
+        {
+            "gatewayId": "acd9b11959a44ab3",
+            "uplinkId": 36640,
+            "gwTime": "2025-10-10T14:07:33.285+00:00",
+            "rssi": -51,
+            "snr": 13.8,
+            "context": "AmvlXA==",
+            "metadata": {
+                "regi": "US915",
+                "gateway_id": "13H54UfBmgVcLujko4ZUo3UiAspkEvv2fzS4bLDtjPyT5ecPfXJ",
+                "network": "helium_iot",
+                "gateway_name": "damp-magenta-turtle"
+            },
+            "crcStatus": "CRC_OK",
+            "time": "2025-10-10T14:07:33.285+00:00"
+        }
+    ],
+    "time": "2025-10-10T14:07:33.285+00:00",
+    "txInfo": {
+        "frequency": 905300000,
+        "modulation": {
+            "lora": {
+                "bandwidth": 125000,
+                "spreadingFactor": 7,
+                "codeRate": "CR_4_5"
+            }
+        }
+    }
+}
+{
+    "object": {
+        "latitude": 43.736,
+        "longitude": -65.8395,
+        "accuracy": 8,
+        "altitude": 2
+    },
+    "adr": true,
+    "confirmed": true,
+    "data": "EENEFkAGVQNxNw==",
+    "deduplicationId": "bb7e4854-8778-46c5-98d2-442bb5c7b389",
+    "devAddr": "78000190",
+    "deviceInfo": {
+        "tenantId": "e1d293fb-6dc5-4214-a23a-94696f17f82f",
+        "tenantName": "buoy",
+        "applicationId": "e12063f6-8fcb-4fc6-8045-41cb880ce55c",
+        "applicationName": "Adeunis FTD Mappers",
+        "deviceProfileId": "5aafaf97-e079-469e-ae07-0a121ca14ff2",
+        "deviceProfileName": "Adeunis Panga Mappers",
+        "deviceName": "Adeunis #1 Panga Mapper (2C95)",
+        "devEui": "0018b20000022c95",
+        "deviceClassEnabled": "CLASS_A",
+        "tags": {}
+    },
+    "dr": 3,
+    "fCnt": 200,
+    "fPort": 1,
+    "rxInfo": [
+        {
+            "gatewayId": "acd9b11959a44ab3",
+            "uplinkId": 61277,
+            "gwTime": "2025-10-10T14:17:33.244+00:00",
+            "rssi": -47,
+            "snr": 13.8,
+            "context": "Ji6RRw==",
+            "metadata": {
+                "gateway_name": "damp-magenta-turtle",
+                "network": "helium_iot",
+                "gateway_id": "13H54UfBmgVcLujko4ZUo3UiAspkEvv2fzS4bLDtjPyT5ecPfXJ",
+                "regi": "US915"
+            },
+            "crcStatus": "CRC_OK",
+            "time": "2025-10-10T14:17:33.244+00:00"
+        }
+    ],
+    "time": "2025-10-10T14:17:33.244+00:00",
+    "txInfo": {
+        "frequency": 904100000,
+        "modulation": {
+            "lora": {
+                "bandwidth": 125000,
+                "spreadingFactor": 7,
+                "codeRate": "CR_4_5"
+            }
+        }
+    }
+}
+{
+    "object": {
+        "latitude": 43.736,
+        "longitude": -65.8395,
+        "accuracy": 8,
+        "altitude": 2
+    },
+    "adr": true,
+    "confirmed": true,
+    "data": "EENEFiAGVQNxOA==",
+    "deduplicationId": "1bcde8d1-eb8a-48af-867c-a43898ae3f55",
+    "devAddr": "78000192",
+    "deviceInfo": {
+        "tenantId": "e1d293fb-6dc5-4214-a23a-94696f17f82f",
+        "tenantName": "buoy",
+        "applicationId": "e12063f6-8fcb-4fc6-8045-41cb880ce55c",
+        "applicationName": "Adeunis FTD Mappers",
+        "deviceProfileId": "5aafaf97-e079-469e-ae07-0a121ca14ff2",
+        "deviceProfileName": "Adeunis Panga Mappers",
+        "deviceName": "Adeunis #3 Panga Mapper (0E95)",
+        "devEui": "0018b20000020e95",
+        "deviceClassEnabled": "CLASS_A",
+        "tags": {}
+    },
+    "dr": 2,
+    "fCnt": 176,
+    "fPort": 1,
+    "rxInfo": [
+        {
+            "gatewayId": "acd9b11959a44ab3",
+            "uplinkId": 30359,
+            "gwTime": "2025-10-10T14:19:15.093+00:00",
+            "rssi": -41,
+            "snr": 13.2,
+            "context": "LECeTA==",
+            "metadata": {
+                "gateway_id": "13H54UfBmgVcLujko4ZUo3UiAspkEvv2fzS4bLDtjPyT5ecPfXJ",
+                "network": "helium_iot",
+                "gateway_name": "damp-magenta-turtle",
+                "regi": "US915"
+            },
+            "crcStatus": "CRC_OK",
+            "time": "2025-10-10T14:19:15.093+00:00"
+        }
+    ],
+    "time": "2025-10-10T14:19:15.093+00:00",
+    "txInfo": {
+        "frequency": 904500000,
+        "modulation": {
+            "lora": {
+                "bandwidth": 125000,
+                "spreadingFactor": 8,
+                "codeRate": "CR_4_5"
+            }
+        }
+    }
+}
+{
+    "object": {
+        "latitude": 43.736,
+        "longitude": -65.8395,
+        "accuracy": 8,
+        "altitude": 2
+    },
+    "adr": true,
+    "confirmed": true,
+    "data": "EENEFjAGVQNxNg==",
+    "deduplicationId": "0423803e-0ced-4aa0-ac3a-3bbf05851e07",
+    "devAddr": "78000190",
+    "deviceInfo": {
+        "tenantId": "e1d293fb-6dc5-4214-a23a-94696f17f82f",
+        "tenantName": "buoy",
+        "applicationId": "e12063f6-8fcb-4fc6-8045-41cb880ce55c",
+        "applicationName": "Adeunis FTD Mappers",
+        "deviceProfileId": "5aafaf97-e079-469e-ae07-0a121ca14ff2",
+        "deviceProfileName": "Adeunis Panga Mappers",
+        "deviceName": "Adeunis #1 Panga Mapper (2C95)",
+        "devEui": "0018b20000022c95",
+        "deviceClassEnabled": "CLASS_A",
+        "tags": {}
+    },
+    "dr": 3,
+    "fCnt": 202,
+    "fPort": 1,
+    "rxInfo": [
+        {
+            "gatewayId": "acd9b11959a44ab3",
+            "uplinkId": 13240,
+            "gwTime": "2025-10-10T14:27:33.203+00:00",
+            "rssi": -48,
+            "snr": 13.2,
+            "context": "SfE5cQ==",
+            "metadata": {
+                "gateway_id": "13H54UfBmgVcLujko4ZUo3UiAspkEvv2fzS4bLDtjPyT5ecPfXJ",
+                "network": "helium_iot",
+                "gateway_name": "damp-magenta-turtle",
+                "regi": "US915"
+            },
+            "crcStatus": "CRC_OK",
+            "time": "2025-10-10T14:27:33.203+00:00"
+        }
+    ],
+    "time": "2025-10-10T14:27:33.203+00:00",
+    "txInfo": {
+        "frequency": 905300000,
+        "modulation": {
+            "lora": {
+                "bandwidth": 125000,
+                "spreadingFactor": 7,
+                "codeRate": "CR_4_5"
+            }
+        }
+    }
+}
