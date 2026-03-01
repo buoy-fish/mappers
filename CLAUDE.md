@@ -2,10 +2,10 @@
 
 ## Git Branch Policy
 
-- Commits directly to `master` are allowed
+- Commits directly to `main` are allowed
 - For larger changes, feature branches are preferred (e.g., `feature/buoy-fish-branding`)
 - Always confirm the current branch before committing: `git branch --show-current`
-- Do not force-push to `master`
+- Do not force-push to `main`
 
 ## Project Overview
 
