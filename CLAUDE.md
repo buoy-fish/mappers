@@ -2,10 +2,10 @@
 
 ## Git Branch Policy
 
-**IMPORTANT**: AI agents must NEVER push to `master` or `main`.
-- Work on feature branches (e.g., `feature/buoy-fish-branding`)
-- Merges to master are performed manually by the user
+- Commits directly to `master` are allowed
+- For larger changes, feature branches are preferred (e.g., `feature/buoy-fish-branding`)
 - Always confirm the current branch before committing: `git branch --show-current`
+- Do not force-push to `master`
 
 ## Project Overview
 
