@@ -4,17 +4,22 @@
 # remember to add this file to your .gitignore.
 import Config
 
-database_url =
-  System.get_env("DATABASE_URL") ||
-    raise """
-    environment variable DATABASE_URL is missing.
-    For example: ecto://USER:PASS@HOST/DATABASE
-    """
-
-config :mappers, Mappers.Repo,
-  ssl: false,
-  url: database_url,
-  pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10")
+# Database configuration.
+# If DATABASE_URL is set, use it (for remote/password-auth connections).
+# Otherwise, use local PostgreSQL via unix socket with peer auth (no password needed).
+if database_url = System.get_env("DATABASE_URL") do
+  config :mappers, Mappers.Repo,
+    ssl: false,
+    url: database_url,
+    pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10")
+else
+  config :mappers, Mappers.Repo,
+    ssl: false,
+    username: System.get_env("DB_USER") || "ubuntu",
+    database: System.get_env("DB_NAME") || "buoy_mappers",
+    socket_dir: System.get_env("DB_SOCKET_DIR") || "/var/run/postgresql",
+    pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10")
+end
 
 secret_key_base =
   System.get_env("SECRET_KEY_BASE") ||
