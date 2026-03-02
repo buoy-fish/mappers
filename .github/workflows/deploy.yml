@@ -1,0 +1,101 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-mapper
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy Mapper
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/buoy-fish-deploy.pem
+          chmod 600 ~/.ssh/buoy-fish-deploy.pem
+          ssh-keyscan -H app.buoy.fish >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Deploy mapper
+        run: |
+          ssh -i ~/.ssh/buoy-fish-deploy.pem -o StrictHostKeyChecking=no ubuntu@app.buoy.fish << 'DEPLOY'
+          set -e
+          MAPPER_DIR="/home/ubuntu/map.buoy.fish"
+          APP_DEPLOY="/home/ubuntu/app.buoy.fish/deploy"
+
+          # ── Pull latest code ──
+          cd "$MAPPER_DIR"
+          git fetch origin
+          git checkout -- . 2>/dev/null || true
+          git checkout origin/main
+          echo "Switched to origin/main: $(git log --oneline -1)"
+
+          # ── Load environment ──
+          set -a; source .env; set +a
+
+          # ── Install dependencies ──
+          MIX_ENV=prod nix develop --command mix deps.get --only prod 2>&1 | tail -5
+          cd assets && nix develop --command npm install 2>&1 | tail -5
+          cd ..
+          echo "Dependencies installed"
+
+          # ── Build assets ──
+          nix develop --command bash -c 'cd assets && NODE_ENV=production node build.mjs --deploy' 2>&1 | tail -5
+          MIX_ENV=prod nix develop --command mix phx.digest 2>&1 | tail -5
+          echo "Assets built"
+
+          # ── Migrate + compile ──
+          MIX_ENV=prod nix develop --command mix ecto.migrate 2>&1 | tail -5
+          MIX_ENV=prod nix develop --command mix compile --force 2>&1 | tail -5
+          echo "Migrated and compiled"
+
+          # ── Sync infra configs from app.buoy.fish (if available) ──
+          RELOAD_NEEDED=false
+          if [ -d "$APP_DEPLOY" ]; then
+              for SVC in buoy_mapper.service martin.service; do
+                  if [ -f "$APP_DEPLOY/$SVC" ]; then
+                      if ! diff -q "$APP_DEPLOY/$SVC" "/etc/systemd/system/$SVC" > /dev/null 2>&1; then
+                          sudo cp "$APP_DEPLOY/$SVC" "/etc/systemd/system/$SVC"
+                          RELOAD_NEEDED=true
+                          echo "$SVC updated"
+                      fi
+                  fi
+              done
+              if [ -f "$APP_DEPLOY/nginx-map-buoy-fish.conf" ]; then
+                  if ! diff -q "$APP_DEPLOY/nginx-map-buoy-fish.conf" /etc/nginx/sites-available/map-buoy-fish > /dev/null 2>&1; then
+                      sudo cp "$APP_DEPLOY/nginx-map-buoy-fish.conf" /etc/nginx/sites-available/map-buoy-fish
+                      sudo ln -sf /etc/nginx/sites-available/map-buoy-fish /etc/nginx/sites-enabled/map-buoy-fish
+                      RELOAD_NEEDED=true
+                      echo "Mapper nginx config updated"
+                  fi
+              fi
+          fi
+
+          if [ "$RELOAD_NEEDED" = true ]; then
+              sudo systemctl daemon-reload
+              sudo nginx -t && sudo systemctl reload nginx
+          fi
+
+          # ── Restart services ──
+          sudo systemctl restart buoy_mapper martin
+          echo "Services restarted"
+
+          sleep 5
+
+          # ── Verify ──
+          if sudo systemctl is-active --quiet buoy_mapper && sudo systemctl is-active --quiet martin; then
+              echo "All services active"
+          else
+              echo "WARNING: Service check failed"
+              sudo systemctl status buoy_mapper --no-pager | head -5
+              sudo systemctl status martin --no-pager | head -5
+              exit 1
+          fi
+          DEPLOY
