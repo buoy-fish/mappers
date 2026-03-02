@@ -258,6 +258,7 @@ function Map(props) {
         setShowHexPaneCloseButton(false);
         if (features) {
             features.forEach(feature => {
+                if (!feature?.layer) return;
                 if (feature.layer.id == "public.h3_res9") {
                     // Mark this hex as clicked synchronously BEFORE navigate(),
                     // so the location useEffect knows onClick already handled it.
