@@ -25,8 +25,11 @@ jobs:
 
       - name: Deploy mapper
         run: |
-          ssh -i ~/.ssh/buoy-fish-deploy.pem -o StrictHostKeyChecking=no ubuntu@app.buoy.fish << 'DEPLOY'
-          set -e
+          # Write deploy script to a temp file so we can use ssh -T with proper exit code propagation
+          cat > /tmp/deploy-mapper.sh << 'SCRIPT'
+          #!/bin/bash
+          set -euo pipefail
+
           MAPPER_DIR="/home/ubuntu/map.buoy.fish"
           APP_DEPLOY="/home/ubuntu/app.buoy.fish/deploy"
 
@@ -35,26 +38,31 @@ jobs:
           git fetch origin
           git checkout -- . 2>/dev/null || true
           git checkout origin/main
-          echo "Switched to origin/main: $(git log --oneline -1)"
+          echo "✓ Switched to origin/main: $(git log --oneline -1)"
 
           # ── Load environment ──
           set -a; source .env; set +a
 
           # ── Install dependencies ──
-          MIX_ENV=prod nix develop --command mix deps.get --only prod 2>&1 | tail -5
-          cd assets && nix develop --command npm install 2>&1 | tail -5
-          cd ..
-          echo "Dependencies installed"
+          echo "Installing Elixir deps..."
+          MIX_ENV=prod nix develop --command mix deps.get --only prod
+          echo "Installing Node deps..."
+          nix develop --command bash -c 'cd assets && npm install'
+          echo "✓ Dependencies installed"
 
           # ── Build assets ──
-          nix develop --command bash -c 'cd assets && NODE_ENV=production node build.mjs --deploy' 2>&1 | tail -5
-          MIX_ENV=prod nix develop --command mix phx.digest 2>&1 | tail -5
-          echo "Assets built"
+          echo "Building assets..."
+          nix develop --command bash -c 'cd assets && NODE_ENV=production node build.mjs --deploy'
+          echo "Running phx.digest..."
+          MIX_ENV=prod nix develop --command mix phx.digest
+          echo "✓ Assets built"
 
           # ── Migrate + compile ──
-          MIX_ENV=prod nix develop --command mix ecto.migrate 2>&1 | tail -5
-          MIX_ENV=prod nix develop --command mix compile --force 2>&1 | tail -5
-          echo "Migrated and compiled"
+          echo "Running migrations..."
+          MIX_ENV=prod nix develop --command mix ecto.migrate
+          echo "Compiling..."
+          MIX_ENV=prod nix develop --command mix compile --force
+          echo "✓ Migrated and compiled"
 
           # ── Sync infra configs from app.buoy.fish (if available) ──
           RELOAD_NEEDED=false
@@ -85,17 +93,21 @@ jobs:
 
           # ── Restart services ──
           sudo systemctl restart buoy_mapper martin
-          echo "Services restarted"
+          echo "✓ Services restarted"
 
           sleep 5
 
           # ── Verify ──
           if sudo systemctl is-active --quiet buoy_mapper && sudo systemctl is-active --quiet martin; then
-              echo "All services active"
+              echo "✓ All services active — deploy complete"
           else
-              echo "WARNING: Service check failed"
-              sudo systemctl status buoy_mapper --no-pager | head -5
-              sudo systemctl status martin --no-pager | head -5
+              echo "FAILED: Service check failed"
+              sudo systemctl status buoy_mapper --no-pager | head -10
+              sudo systemctl status martin --no-pager | head -10
               exit 1
           fi
-          DEPLOY
+          SCRIPT
+
+          # Copy script to server and execute it (properly propagates exit code)
+          scp -i ~/.ssh/buoy-fish-deploy.pem -o StrictHostKeyChecking=no /tmp/deploy-mapper.sh ubuntu@app.buoy.fish:/tmp/deploy-mapper.sh
+          ssh -i ~/.ssh/buoy-fish-deploy.pem -o StrictHostKeyChecking=no ubuntu@app.buoy.fish 'bash /tmp/deploy-mapper.sh'
