@@ -35,9 +35,10 @@ function Map(props) {
     // without waiting for a re-render. This prevents the location useEffect
     // from re-triggering simulateUplinkHexClick for a hex that onClick already loaded.
     const clickedHexRef = useRef(null);
+    const emptyFC = { type: "FeatureCollection", features: [] };
     const [uplinks, setUplinks] = useState(null);
-    const [uplinkHotspotsData, setUplinkHotspotsData] = useState({ line: null, circle: null, hex: null });
-    const [uplinkChannelData, setUplinkChannelData] = useState(null);
+    const [uplinkHotspotsData, setUplinkHotspotsData] = useState({ line: emptyFC, circle: emptyFC, hex: emptyFC });
+    const [uplinkChannelData, setUplinkChannelData] = useState(emptyFC);
     const [hexId, setHexId] = useState(null);
     const [bestRssi, setBestRssi] = useState(null);
     const [snr, setSnr] = useState(null);
@@ -48,7 +49,7 @@ function Map(props) {
     const [initComplete, setInitComplete] = useState(false);
     const [lastPath, setLastPath] = useState(false);
     const [showHexPaneCloseButton, setShowHexPaneCloseButton] = useState(false);
-    const [hexGeoJson, setHexGeoJson] = useState(null);
+    const [hexGeoJson, setHexGeoJson] = useState(emptyFC);
 
     let navigate = useNavigate();
     const location = useLocation();
