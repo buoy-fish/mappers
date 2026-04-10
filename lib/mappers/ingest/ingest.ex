@@ -76,30 +76,48 @@ defmodule Mappers.Ingest do
   end
 
   # ChirpStack: look for "object" key as indicator
+  #
+  # BUOY.FISH RELAXATION (2026-04-09): Raw ChirpStack payloads from app.buoy.fish
+  # may be missing fields that the old Node-RED massage function used to provide.
+  # We now handle these gracefully with defaults:
+  #   - accuracy: defaults to 0.0 (unknown) if nil
+  #   - altitude: defaults to 0.0 (sea level) if nil
+  #   - txInfo: may be missing; frequency/spreading default to 0/unknown
+  #   - time: falls back to first rxInfo time if missing at top level
   defp normalize_payload(%{"object" => object} = message) do
     spreading_factor = get_in(message, ["txInfo", "modulation", "lora", "spreadingFactor"])
     bandwidth = get_in(message, ["txInfo", "modulation", "lora", "bandwidth"])
-    spreading = "SF#{spreading_factor}BW#{div(bandwidth, 1000)}"
-    tx_frequency = get_in(message, ["txInfo", "frequency"]) / 1_000_000
+
+    {tx_frequency, spreading} =
+      if spreading_factor && bandwidth do
+        freq = get_in(message, ["txInfo", "frequency"]) / 1_000_000
+        {freq, "SF#{spreading_factor}BW#{div(bandwidth, 1000)}"}
+      else
+        {0.0, "unknown"}
+      end
+
+    # Fall back to first rxInfo time if top-level time is missing
+    top_time = message["time"] || get_in(message, ["rxInfo", Access.at(0), "time"]) ||
+               get_in(message, ["rxInfo", Access.at(0), "gwTime"])
 
     normalized_message = %{
       "app_eui" => "0000000000000000", # ChirpStack does not provide this field
       "dev_eui" => get_in(message, ["deviceInfo", "devEui"]),
       "id" => message["deduplicationId"],
       "fcnt" => message["fCnt"],
-      "reported_at" => parse_reported_at(message["time"]),
+      "reported_at" => parse_reported_at(top_time),
       "frequency" => tx_frequency,
       "spreading" => spreading,
       "decoded" => %{
         "payload" => %{
           "latitude" => object["latitude"],
           "longitude" => object["longitude"],
-          "accuracy" => object["accuracy"],
-          "altitude" => object["altitude"]
+          "accuracy" => object["accuracy"] || 0.0,
+          "altitude" => object["altitude"] || 0.0
         },
         "status" => "success"
       },
-      "hotspots" => normalize_hotspots(message["rxInfo"], tx_frequency, spreading)
+      "hotspots" => normalize_hotspots(message["rxInfo"] || [], tx_frequency, spreading)
     }
 
     {:ok, normalized_message}
@@ -134,6 +152,10 @@ defmodule Mappers.Ingest do
     {:error, "Unrecognized payload format"}
   end
 
+  # BUOY.FISH RELAXATION (2026-04-09): Handle raw ChirpStack rxInfo entries that:
+  #   - Use gwTime instead of time
+  #   - Have lat/long as floats instead of strings
+  #   - May be missing gateway location entirely (filtered out)
   defp normalize_hotspots(rxInfo, tx_frequency, spreading) do
     rxInfo
     |> Enum.filter(fn info ->
@@ -148,24 +170,40 @@ defmodule Mappers.Ingest do
       end
     end)
     |> Enum.map(fn info ->
+      # Raw ChirpStack uses gwTime; Node-RED-massaged payloads use time
+      hotspot_time = info["time"] || info["gwTime"]
+
       %{
         "id" => get_in(info, ["metadata", "gateway_id"]),
-        "name" => get_in(info, ["metadata", "gateway_name"]),
-        "lat" => String.to_float(get_in(info, ["metadata", "gateway_lat"])),
-        "long" => String.to_float(get_in(info, ["metadata", "gateway_long"])),
+        "name" => get_in(info, ["metadata", "gateway_name"]) || "unknown",
+        "lat" => to_float(get_in(info, ["metadata", "gateway_lat"])),
+        "long" => to_float(get_in(info, ["metadata", "gateway_long"])),
         "rssi" => info["rssi"],
         "snr" => info["snr"],
         "frequency" => tx_frequency,
         "spreading" => spreading,
-        "reported_at" => parse_reported_at(info["time"])
+        "reported_at" => parse_reported_at(hotspot_time)
       }
     end)
   end
 
-  defp parse_reported_at(timestamp) do
+  # Convert string or numeric lat/long values to float safely
+  defp to_float(val) when is_float(val), do: val
+  defp to_float(val) when is_integer(val), do: val * 1.0
+  defp to_float(val) when is_binary(val) do
+    case Float.parse(val) do
+      {f, _} -> f
+      :error -> 0.0
+    end
+  end
+  defp to_float(_), do: 0.0
+
+  defp parse_reported_at(nil), do: nil
+  defp parse_reported_at(timestamp) when is_binary(timestamp) do
     case DateTime.from_iso8601(timestamp) do
       {:ok, datetime, _offset} -> DateTime.to_unix(datetime, :millisecond)
       _ -> nil
     end
   end
+  defp parse_reported_at(_), do: nil
 end
