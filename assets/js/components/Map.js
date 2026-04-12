@@ -4,7 +4,7 @@ import MapGL, { Source, Layer, GeolocateControl, NavigationControl } from 'react
 import 'maplibre-gl/dist/maplibre-gl.css';
 import InfoPane from "../components/InfoPane"
 import WelcomeModal from "../components/WelcomeModal"
-import { uplinkTileServerLayer, uplinkHotspotsLineLayer, uplinkHotspotsCircleLayer, uplinkHotspotsHexLayer, uplinkChannelLayer } from './Layers.js';
+import { uplinkTileServerLayer, uplinkHotspotsLineLayer, uplinkRelayLineLayer, uplinkHotspotsCircleLayer, uplinkHotspotsHexLayer, uplinkChannelLayer, gatewayMarkerLayer, gatewayLabelLayer, selectedHexLayer } from './Layers.js';
 import bbox from '@turf/bbox';
 import { get } from '../data/Rest'
 import { geoToH3, h3ToGeo, h3ToGeoBoundary } from "h3-js";
@@ -50,6 +50,22 @@ function Map(props) {
     const [lastPath, setLastPath] = useState(false);
     const [showHexPaneCloseButton, setShowHexPaneCloseButton] = useState(false);
     const [hexGeoJson, setHexGeoJson] = useState(emptyFC);
+    const [gatewayGeoJson, setGatewayGeoJson] = useState(emptyFC);
+    const [showGateways, setShowGateways] = useState(false);
+    const [hideCoverage, setHideCoverage] = useState(false);
+
+    const selectedHexGeoJson = React.useMemo(() => {
+        if (!hexId || !showHexPane) return emptyFC;
+        const boundary = h3ToGeoBoundary(hexId, true);
+        return {
+            type: "FeatureCollection",
+            features: [{
+                type: "Feature",
+                geometry: { type: "Polygon", coordinates: [boundary] },
+                properties: { best_rssi: bestRssi }
+            }]
+        };
+    }, [hexId, bestRssi, showHexPane]);
 
     let navigate = useNavigate();
     const location = useLocation();
@@ -60,6 +76,28 @@ function Map(props) {
             .then(res => res.json())
             .then(data => setHexGeoJson(data))
             .catch(err => console.error('Failed to load hex data:', err));
+    }, []);
+
+    // Load gateway positions
+    React.useEffect(() => {
+        fetch('/api/v1/gateways')
+            .then(res => res.json())
+            .then(data => {
+                const features = (data.gateways || []).map(gw => ({
+                    type: "Feature",
+                    geometry: {
+                        type: "Point",
+                        coordinates: [gw.lng, gw.lat]
+                    },
+                    properties: {
+                        gateway_eui: gw.gateway_eui,
+                        name: gw.hotspot_name || gw.gateway_eui,
+                        last_heard: gw.last_heard
+                    }
+                }));
+                setGatewayGeoJson({ type: "FeatureCollection", features });
+            })
+            .catch(err => console.error('Failed to load gateway data:', err));
     }, []);
 
     React.useEffect(() => {
@@ -185,21 +223,60 @@ function Map(props) {
                 var hotspot_hex_features = [];
                 setUplinks(uplinks.uplinks)
                 const uplink_coords = h3ToGeo(h3_index)
+
+                // Build a lookup of gateway positions from the uplinks data
+                const gwPositions = {};
+                uplinks.uplinks.forEach(h => {
+                    if (h.gateway_eui) {
+                        gwPositions[h.gateway_eui] = { lat: h.lat, lng: h.lng };
+                    }
+                });
+                // Track which gateway_euis are part of a mesh path
+                const meshGwEuis = new Set();
+                uplinks.uplinks.forEach(h => {
+                    if (h.relay_gateway_eui) {
+                        meshGwEuis.add(h.relay_gateway_eui);
+                        meshGwEuis.add(h.gateway_eui);
+                    }
+                });
+
                 uplinks.uplinks.map((h, i) => {
                     const hotspot_h3_index = geoToH3(h.lat, h.lng, 8)
                     const hotspot_coords = h3ToGeo(hotspot_h3_index)
                     const hotspot_polygon_coords = h3ToGeoBoundary(hotspot_h3_index, true)
-                    hotspot_line_features.push(
-                        {
+                    const isMesh = meshGwEuis.has(h.gateway_eui);
+
+                    if (h.relay_gateway_eui && gwPositions[h.relay_gateway_eui]) {
+                        // Relay leg: draw line from mesh GW to this border GW
+                        const relayPos = gwPositions[h.relay_gateway_eui];
+                        const relay_h3 = geoToH3(relayPos.lat, relayPos.lng, 8);
+                        const relay_coords = h3ToGeo(relay_h3);
+                        hotspot_line_features.push({
                             "type": "Feature",
                             "geometry": {
                                 "type": "LineString",
                                 "coordinates": [
-                                    [hotspot_coords[1], hotspot_coords[0]], [uplink_coords[1], uplink_coords[0]]
+                                    [relay_coords[1], relay_coords[0]],
+                                    [hotspot_coords[1], hotspot_coords[0]]
                                 ]
-                            }
-                        }
-                    )
+                            },
+                            "properties": { "is_mesh": true }
+                        })
+                    } else {
+                        // Direct leg: draw line from hex (device) to this gateway
+                        hotspot_line_features.push({
+                            "type": "Feature",
+                            "geometry": {
+                                "type": "LineString",
+                                "coordinates": [
+                                    [hotspot_coords[1], hotspot_coords[0]],
+                                    [uplink_coords[1], uplink_coords[0]]
+                                ]
+                            },
+                            "properties": { "is_mesh": isMesh }
+                        })
+                    }
+
                     hotspot_circle_features.push(
                         {
                             "type": "Feature",
@@ -332,6 +409,15 @@ function Map(props) {
         }
     }, []);
 
+    const onFlyToProject = useCallback(project => {
+        setViewState(prev => ({
+            ...prev,
+            latitude: project.lat,
+            longitude: project.lng,
+            zoom: project.zoom || 12
+        }));
+    }, []);
+
     const interactiveLayerIds = ['public.h3_res9', 'uplinkChannelLayer'];
 
     return (
@@ -352,24 +438,40 @@ function Map(props) {
                     position="top-right"
                 />
                 <NavigationControl position="top-right" />
-                <Source id="uplink-tileserver" type="geojson" data={hexGeoJson}>
-                    <Layer {...uplinkTileServerLayer} />
-                </Source>
-                <Source id="uplink-channel" type="geojson" data={uplinkChannelData}>
-                    <Layer {...uplinkChannelLayer} />
-                </Source>
+                {!hideCoverage &&
+                    <Source id="uplink-tileserver" type="geojson" data={hexGeoJson}>
+                        <Layer {...uplinkTileServerLayer} />
+                    </Source>
+                }
+                {!hideCoverage &&
+                    <Source id="uplink-channel" type="geojson" data={uplinkChannelData}>
+                        <Layer {...uplinkChannelLayer} />
+                    </Source>
+                }
+                {hideCoverage && showHexPane &&
+                    <Source id="selected-hex" type="geojson" data={selectedHexGeoJson}>
+                        <Layer {...selectedHexLayer} />
+                    </Source>
+                }
                 <Source id="uplink-hotspots-hex" type="geojson" data={uplinkHotspotsData.hex}>
                     <Layer {...uplinkHotspotsHexLayer} />
                 </Source>
                 <Source id="uplink-hotspots-line" type="geojson" data={uplinkHotspotsData.line}>
                     <Layer {...uplinkHotspotsLineLayer} />
+                    <Layer {...uplinkRelayLineLayer} />
                 </Source>
                 <Source id="uplink-hotspots-circle" type="geojson" data={uplinkHotspotsData.circle}>
                     <Layer {...uplinkHotspotsCircleLayer} />
                 </Source>
+                {showGateways &&
+                    <Source id="gateways" type="geojson" data={gatewayGeoJson}>
+                        <Layer {...gatewayMarkerLayer} />
+                        <Layer {...gatewayLabelLayer} />
+                    </Source>
+                }
 
             </MapGL>
-            <InfoPane hexId={hexId} bestRssi={bestRssi} snr={snr} uplinks={uplinks} showHexPane={showHexPane} onCloseHexPaneClick={onCloseHexPaneClick} showHexPaneCloseButton={showHexPaneCloseButton} />
+            <InfoPane hexId={hexId} bestRssi={bestRssi} snr={snr} uplinks={uplinks} showHexPane={showHexPane} onCloseHexPaneClick={onCloseHexPaneClick} showHexPaneCloseButton={showHexPaneCloseButton} showGateways={showGateways} onToggleGateways={() => setShowGateways(!showGateways)} hideCoverage={hideCoverage} onToggleCoverage={() => setHideCoverage(!hideCoverage)} onFlyToProject={onFlyToProject} />
             <WelcomeModal showWelcomeModal={showWelcomeModal} onCloseWelcomeModalClick={onCloseWelcomeModalClick} />
         </div>
     );

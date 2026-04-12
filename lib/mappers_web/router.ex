@@ -34,6 +34,7 @@ defmodule MappersWeb.Router do
     post "/ingest/uplink", API.V1.IngestUplinkController, :create
     get "/uplinks/hex/:h3_index", API.V1.UplinkController, :get_uplinks
     get "/hexes", API.V1.HexController, :index
+    get "/gateways", API.V1.GatewayController, :index
   end
 
   scope "/api/v1", MappersWeb do

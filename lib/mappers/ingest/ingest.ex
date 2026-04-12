@@ -176,6 +176,8 @@ defmodule Mappers.Ingest do
       %{
         "id" => get_in(info, ["metadata", "gateway_id"]),
         "name" => get_in(info, ["metadata", "gateway_name"]) || "unknown",
+        "gateway_eui" => info["gatewayId"],
+        "relay_gateway_eui" => info["relay_gateway_eui"],
         "lat" => to_float(get_in(info, ["metadata", "gateway_lat"])),
         "long" => to_float(get_in(info, ["metadata", "gateway_long"])),
         "rssi" => info["rssi"],

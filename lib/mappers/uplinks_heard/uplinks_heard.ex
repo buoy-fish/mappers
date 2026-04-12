@@ -8,6 +8,8 @@ defmodule Mappers.UplinksHeard do
         %{}
         |> Map.put(:hotspot_address, hotspot["id"])
         |> Map.put(:hotspot_name, hotspot["name"])
+        |> Map.put(:gateway_eui, hotspot["gateway_eui"])
+        |> Map.put(:relay_gateway_eui, hotspot["relay_gateway_eui"])
         |> Map.put(:latitude, hotspot["lat"])
         |> Map.put(:longitude, hotspot["long"])
         |> Map.put(:rssi, hotspot["rssi"])

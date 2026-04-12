@@ -40,6 +40,8 @@ defmodule Mappers.Uplinks do
       select: %{
         uplink_heard_id: uh.id,
         hotspot_name: uh.hotspot_name,
+        gateway_eui: uh.gateway_eui,
+        relay_gateway_eui: uh.relay_gateway_eui,
         rssi: uh.rssi,
         snr: uh.snr,
         lat: uh.latitude,

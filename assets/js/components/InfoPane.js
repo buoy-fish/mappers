@@ -4,9 +4,18 @@ import formatDistanceToNowStrict from 'date-fns/formatDistanceToNowStrict'
 import parseISO from 'date-fns/parseISO'
 import h3 from 'h3-js/dist/h3-js';
 
+const PROJECTS = [
+    { name: "Punta Abreojos, Baja", lat: 26.72, lng: -113.56, zoom: 12 },
+    { name: "Punta Eugenia, Baja", lat: 27.85, lng: -115.08, zoom: 12 },
+    // TODO: Pull project locations from app.buoy.fish API once projects are defined there
+    { name: "Nova Scotia", lat: 45.30, lng: -64.90, zoom: 10 },
+];
+
 function InfoPane(props) {
     const [showLegendPane, setShowLegendPane] = React.useState(false)
-    const onLegendClick = () => setShowLegendPane(!showLegendPane)
+    const [showProjectsPane, setShowProjectsPane] = React.useState(false)
+    const onLegendClick = () => { setShowLegendPane(!showLegendPane); setShowProjectsPane(false); }
+    const onProjectsClick = () => { setShowProjectsPane(!showProjectsPane); setShowLegendPane(false); }
     const locale = navigator.language;
 
     function hotspotCount() {
@@ -73,6 +82,11 @@ function InfoPane(props) {
         }
     }
 
+    function findGatewayName(uplinks, gatewayEui) {
+        const match = uplinks.find(u => u.gateway_eui === gatewayEui);
+        return match ? deKebab(match.hotspot_name) : gatewayEui;
+    }
+
     function deKebab(string){
         return string
         .split('-')
@@ -83,12 +97,15 @@ function InfoPane(props) {
     return (
         <div className="info-pane">
             <div className={classNames("pane-nav", {
-                 "has-subcontent": showLegendPane || props.showHexPane
+                 "has-subcontent": showLegendPane || showProjectsPane || props.showHexPane
             })}>
                 <span className="mappers-logo" style={{fontSize: '1.25rem', fontWeight: 700, letterSpacing: '-0.01em'}}>Buoy.Fish Coverage</span>
                 <ul className="nav-links">
                     <li className="nav-link">
                         <button onClick={onLegendClick}>Legend</button>
+                    </li>
+                    <li className="nav-link">
+                        <button onClick={onProjectsClick}>Projects</button>
                     </li>
                     <li className="nav-link">
                         <a href="https://buoy.fish" target="_blank">Buoy.Fish</a>
@@ -139,6 +156,48 @@ function InfoPane(props) {
                             <span>Hotspot</span>
                         </div>
                     </div>
+
+                    <div className="legend-line gateway-toggle-line">
+                        <label className="gateway-toggle">
+                            <button
+                                role="switch"
+                                aria-checked={props.showGateways}
+                                onClick={props.onToggleGateways}
+                                className={`gateway-switch ${props.showGateways ? 'active' : ''}`}
+                            >
+                                <span className="gateway-switch-knob" />
+                            </button>
+                            <span>Show Gateways</span>
+                        </label>
+                    </div>
+                    {props.showGateways &&
+                        <div className="legend-line gateway-toggle-line">
+                            <label className="gateway-toggle">
+                                <button
+                                    role="switch"
+                                    aria-checked={props.hideCoverage}
+                                    onClick={props.onToggleCoverage}
+                                    className={`gateway-switch ${props.hideCoverage ? 'active' : ''}`}
+                                >
+                                    <span className="gateway-switch-knob" />
+                                </button>
+                                <span>Hide Coverage</span>
+                            </label>
+                        </div>
+                    }
+                </div>
+            }
+            { showProjectsPane &&
+                <div className="projects-pane">
+                    {PROJECTS.map(project => (
+                        <button
+                            key={project.name}
+                            className="project-item"
+                            onClick={() => { props.onFlyToProject(project); setShowProjectsPane(false); }}
+                        >
+                            {project.name}
+                        </button>
+                    ))}
                 </div>
             }
             { props.showHexPane &&
@@ -198,21 +257,29 @@ function InfoPane(props) {
                         <table className="hotspots-table">
                             <thead className="hotspot-table-head type-smallcap">
                                 <tr>
-                                    <th className="table-left" title="Gateway that heard the mapping device">Hotspots</th>
-                                    <th className="table-right" title="Received Signal Strength Indicator - an estimated measure of power recieved">RSSI</th>
+                                    <th className="table-left" title="Link path">Link</th>
+                                    <th className="table-right" title="Received Signal Strength Indicator">RSSI</th>
                                     <th className="table-right" title="Signal to noise ratio">SNR</th>
-                                    <th className="table-right" title="Distance between hotspot and surveyed hex">Dist</th>
+                                    <th className="table-right" title="Distance">Dist</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {props.uplinks && props.uplinks.map(uplink => (
-                                    <tr key={uplink.id}>
-                                        <td className="table-left animal-cell">{deKebab(uplink.hotspot_name)}</td>
-                                        <td className="table-right util-liga-mono tighten table-numeric">{uplink.rssi}<span className="table-unit"> dBm</span></td>
-                                        <td className="table-right util-liga-mono tighten table-numeric">{uplink.snr.toFixed(2)}</td>
-                                        <td className="table-right util-liga-mono tighten table-numeric">{uplinkDistance(uplink.lat, uplink.lng).number}<span className="table-unit"> {uplinkDistance(uplink.lat, uplink.lng).unit}</span></td>
-                                    </tr>
-                                ))}
+                                {props.uplinks && props.uplinks.map(uplink => {
+                                    const relayName = uplink.relay_gateway_eui
+                                        ? findGatewayName(props.uplinks, uplink.relay_gateway_eui)
+                                        : null;
+                                    const linkLabel = relayName
+                                        ? relayName + " \u2192 " + deKebab(uplink.hotspot_name)
+                                        : "Device \u2192 " + deKebab(uplink.hotspot_name);
+                                    return (
+                                        <tr key={uplink.uplink_heard_id}>
+                                            <td className="table-left animal-cell">{linkLabel}</td>
+                                            <td className="table-right util-liga-mono tighten table-numeric">{uplink.rssi}<span className="table-unit"> dBm</span></td>
+                                            <td className="table-right util-liga-mono tighten table-numeric">{uplink.snr.toFixed(2)}</td>
+                                            <td className="table-right util-liga-mono tighten table-numeric">{uplinkDistance(uplink.lat, uplink.lng).number}<span className="table-unit"> {uplinkDistance(uplink.lat, uplink.lng).unit}</span></td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
