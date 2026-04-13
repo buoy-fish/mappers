@@ -1,6 +1,19 @@
 defmodule Mappers.UplinksHeard do
+  import Ecto.Query, only: [from: 2]
   alias Mappers.Repo
   alias Mappers.UplinksHeards.UplinkHeard
+
+  @doc """
+  Delete all `uplinks_heard` rows for a given gateway EUI. Returns the number
+  of rows deleted. Used by admin coverage-purge endpoint.
+  """
+  def delete_by_gateway(gateway_eui) when is_binary(gateway_eui) do
+    {count, _} =
+      from(u in UplinkHeard, where: u.gateway_eui == ^gateway_eui)
+      |> Repo.delete_all()
+
+    {:ok, count}
+  end
 
   def create(hotspots, uplink_id) do
     uplinks_heard =

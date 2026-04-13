@@ -15,6 +15,12 @@ defmodule MappersWeb.Router do
     plug MappersWeb.Plug.RateLimit, ["api_actions", 300]
   end
 
+  pipeline :admin_api do
+    plug :accepts, ["json"]
+    plug MappersWeb.Plug.RateLimit, ["admin_actions", 60]
+    plug MappersWeb.Plug.AdminAuth
+  end
+
   pipeline :allow_cors do
     plug Corsica, origins: "*"
   end
@@ -42,6 +48,14 @@ defmodule MappersWeb.Router do
     pipe_through :allow_cors
 
     get "/coverage/geo/:coords", API.V1.CoverageController, :get_coverage_from_geo
+  end
+
+  scope "/api/v1/admin", MappersWeb do
+    pipe_through :admin_api
+
+    delete "/gateways/:gateway_eui/coverage",
+           API.V1.Admin.GatewayCoverageController,
+           :delete
   end
 
   # Enables LiveDashboard only for development

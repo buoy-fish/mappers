@@ -73,3 +73,7 @@ config :phoenix, :stacktrace_depth, 20
 
 # Initialize plugs at runtime for faster development compilation
 config :phoenix, :plug_init_mode, :runtime
+
+# Admin API shared-secret token (dev-only default).
+# Production value comes from MAPPERS_ADMIN_TOKEN env var in prod.secret.exs.
+config :mappers, :admin_token, System.get_env("MAPPERS_ADMIN_TOKEN") || "dev-admin-token"

@@ -35,6 +35,10 @@ config :mappers, MappersWeb.Endpoint,
   ],
   secret_key_base: secret_key_base
 
+# Admin API shared-secret token. Used by MappersWeb.Plug.AdminAuth to guard
+# the /api/v1/admin/* routes (e.g. coverage purge). Must be set in production.
+config :mappers, :admin_token, System.get_env("MAPPERS_ADMIN_TOKEN")
+
 # ## Using releases (Elixir v1.9+)
 #
 # If you are doing OTP releases, you need to instruct Phoenix
