@@ -21,7 +21,7 @@ defmodule Mappers.MixProject do
   def application do
     [
       mod: {Mappers.Application, []},
-      extra_applications: [:logger, :runtime_tools]
+      extra_applications: [:logger, :runtime_tools, :inets, :ssl]
     ]
   end
 

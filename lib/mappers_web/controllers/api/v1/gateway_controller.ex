@@ -39,9 +39,6 @@ defmodule MappersWeb.API.V1.GatewayController do
     base = System.get_env("APP_BUOY_URL") || @default_app_url
     url = String.to_charlist("#{base}/api/gateways/public")
 
-    :inets.start()
-    :ssl.start()
-
     request_opts = [timeout: 5_000, connect_timeout: 2_000]
     http_opts = [body_format: :binary]
 
