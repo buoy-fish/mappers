@@ -1,5 +1,6 @@
 defmodule Mappers.UplinksHeard do
   import Ecto.Query, only: [from: 2]
+  require Logger
   alias Mappers.Repo
   alias Mappers.UplinksHeards.UplinkHeard
 
@@ -31,23 +32,44 @@ defmodule Mappers.UplinksHeard do
         |> Map.put(:uplink_id, uplink_id)
       end)
 
-    changeset_insert_results = insert_uplinks_heard(uplinks_heard)
+    task_results = insert_uplinks_heard(uplinks_heard)
 
-    changeset_results =
-      Enum.map(changeset_insert_results, fn {_, {_, changeset}} ->
-        changeset
+    # Each task result is {:ok, {:ok, schema}} on insert success or
+    # {:ok, {:error, changeset}} on changeset/insert failure. The original
+    # code's `match?({:error, _}, changeset)` was checking the wrong thing
+    # (the inner value is a bare schema or changeset, not a tagged tuple),
+    # so failures slipped through into the response and crashed Jason on
+    # the unencodable Ecto.Changeset.
+    #
+    # New behavior: split successes from failures, return only the inserted
+    # schemas, and log any failures so we can debug recurring validation
+    # issues. We do NOT fail the whole uplink on partial failure — losing
+    # one hotspot's "heard" record is preferable to losing the entire H3
+    # hex (which already painted, courtesy of H3.create having succeeded).
+    {successes, failures} =
+      Enum.split_with(task_results, fn
+        {:ok, {:ok, _schema}} -> true
+        _ -> false
       end)
 
-    results =
-      Enum.find(changeset_results, fn changeset ->
-        match?({:error, _}, changeset)
-      end)
+    successful_schemas =
+      Enum.map(successes, fn {:ok, {:ok, schema}} -> schema end)
 
-    if results == nil do
-      {:ok, changeset_results}
-    else
-      {:error, "Uplink Heard Insert Error"}
+    if failures != [] do
+      details =
+        failures
+        |> Enum.map(fn
+          {:ok, {:error, changeset}} -> inspect(changeset.errors)
+          other -> inspect(other)
+        end)
+        |> Enum.join("; ")
+
+      Logger.warning(
+        "[UplinksHeard] #{length(failures)}/#{length(task_results)} inserts failed: #{details}"
+      )
     end
+
+    {:ok, successful_schemas}
   end
 
   def insert_uplinks_heard(uplinks_heard) do

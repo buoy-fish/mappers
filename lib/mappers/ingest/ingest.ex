@@ -186,7 +186,13 @@ defmodule Mappers.Ingest do
       hotspot_time = info["time"] || info["gwTime"]
 
       %{
-        "id" => get_in(info, ["metadata", "gateway_id"]),
+        # Prefer Helium pubkey (HPR injects it at metadata.gateway_id), fall
+        # back to outer gatewayId (the slot1 MAC for local-bridge payloads,
+        # the HPR-derived 8-byte ID for HPR payloads — either is unique per
+        # gateway and satisfies the UplinkHeard schema's required field).
+        # Without this fallback, local-bridge payloads have nil id, the
+        # required-field validation fails, and we lose the "heard" record.
+        "id" => get_in(info, ["metadata", "gateway_id"]) || info["gatewayId"],
         "name" => get_in(info, ["metadata", "gateway_name"]) || "unknown",
         "gateway_eui" => info["gatewayId"],
         "relay_gateway_eui" => info["relay_gateway_eui"],
