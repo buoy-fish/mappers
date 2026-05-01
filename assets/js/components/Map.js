@@ -155,7 +155,12 @@ function Map(props) {
         pitch: 0
     });
     const mapRef = useRef(null);
-    // #region agent log
+    // Mirror darkSatellite into a ref so the early style.load listener
+    // (registered once at mount) reads the current value rather than the
+    // stale closure-captured value from mount time.
+    const darkSatelliteRef = useRef(darkSatellite);
+    React.useEffect(() => { darkSatelliteRef.current = darkSatellite; }, [darkSatellite]);
+
     const debugListenersAttachedRef = useRef(false);
     const setMapRef = useCallback((r) => {
         mapRef.current = r;
@@ -163,21 +168,32 @@ function Map(props) {
         const m = r.getMap?.();
         if (!m) return;
         debugListenersAttachedRef.current = true;
+        // #region agent log
         const log = (msg, data, hyp) => {
-            const payload = { sessionId: 'f70c37', runId: 'pre-fix-1', hypothesisId: hyp, location: 'Map.js:setMapRef', message: msg, data: { perfNow: Math.round(performance.now()), ...data }, timestamp: Date.now() };
+            const payload = { sessionId: 'f70c37', runId: 'post-fix-1', hypothesisId: hyp, location: 'Map.js:setMapRef', message: msg, data: { perfNow: Math.round(performance.now()), ...data }, timestamp: Date.now() };
             console.log('[DEBUG-SAT]', msg, payload.data);
             fetch('http://127.0.0.1:7821/ingest/eb093061-f534-4da7-ac4f-47b78341fc6b', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f70c37' }, body: JSON.stringify(payload) }).catch(() => { });
         };
         log('ref-attached', { isStyleLoaded: m.isStyleLoaded(), areTilesLoaded: typeof m.areTilesLoaded === "function" ? m.areTilesLoaded() : null }, 'A');
+        // #endregion
+        // CRITICAL FIX: apply the satellite treatment as soon as style.load
+        // fires (before any tile renders). The previous fix registered this
+        // handler inside `onLoad`, which fires ~500 ms LATER — by then tiles
+        // had already painted with default bright values, causing the flash.
         m.on('style.load', () => {
+            // #region agent log
             const layers = m.getStyle()?.layers || [];
-            log('style.load fired (early listener)', { rasterLayerCount: layers.filter(l => l.type === "raster").length, areTilesLoaded: m.areTilesLoaded() }, 'A,C');
+            log('style.load fired (early listener) — applying treatment', { rasterLayerCount: layers.filter(l => l.type === "raster").length, areTilesLoaded: m.areTilesLoaded() }, 'A,C');
+            // #endregion
+            if (USE_MAPBOX) {
+                applySatelliteTreatment(m, darkSatelliteRef.current ? SATELLITE_DARK_TREATMENT : SATELLITE_LIGHT_TREATMENT);
+            }
         });
+        // #region agent log
         m.on('idle', () => log('idle (first paint complete)', {}, 'B,D'));
         m.on('data', (e) => {
             if (e.dataType === "source" && e.tile) log('first tile painted', { sourceId: e.sourceId, sourceType: e.source?.type }, 'B,D');
         });
-        // CSS sanity check: hypothesis E
         setTimeout(() => {
             try {
                 const c = document.querySelector('.map-container');
@@ -189,8 +205,8 @@ function Map(props) {
                 }, 'E');
             } catch (_) { }
         }, 50);
+        // #endregion
     }, []);
-    // #endregion
     // Ref to synchronously track which hex was loaded by a user click.
     // Unlike useState, refs update immediately and are available in closures
     // without waiting for a re-render. This prevents the location useEffect
@@ -614,15 +630,12 @@ function Map(props) {
                         fetch('http://127.0.0.1:7821/ingest/eb093061-f534-4da7-ac4f-47b78341fc6b', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f70c37' }, body: JSON.stringify(payload) }).catch(() => { });
                     } catch (_) { }
                     // #endregion
-                    // Apply once now in case style.load already fired.
+                    // Belt-and-suspenders: in case the early style.load
+                    // listener (registered in setMapRef) hasn't fired yet for
+                    // any reason, apply the treatment now too. The primary
+                    // application path is the style.load listener — which
+                    // runs ~500ms earlier and BEFORE tiles render.
                     applySatelliteTreatment(m, darkSatellite ? SATELLITE_DARK_TREATMENT : SATELLITE_LIGHT_TREATMENT);
-                    // Also re-apply on every subsequent style.load — fires
-                    // earlier than `load` (before first tiles render), so any
-                    // future style swap (and the initial load on slower
-                    // connections) won't flash through bright tiles first.
-                    m.on("style.load", () => {
-                        applySatelliteTreatment(m, darkSatellite ? SATELLITE_DARK_TREATMENT : SATELLITE_LIGHT_TREATMENT);
-                    });
                 } : undefined}
                 ref={setMapRef}
                 interactiveLayerIds={interactiveLayerIds}
