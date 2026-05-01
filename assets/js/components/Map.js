@@ -102,10 +102,15 @@ var selectedStateIdChannel = null;
 const channel = socket.channel("h3:new")
 
 function Map(props) {
+    // `startZoom` is supplied by MapScreen.js from the admin-editable
+    // map.buoy.fish default view (fetched from app.buoy.fish on page load,
+    // cached in localStorage). Falls back to the historical hard-coded 11
+    // when callers don't pass anything so behavior is unchanged for any
+    // call sites that don't yet wire it through.
     const [viewState, setViewState] = useState({
         latitude: props.startLatitude,
         longitude: props.startLongitude,
-        zoom: 11,
+        zoom: props.startZoom ?? 11,
         bearing: 0,
         pitch: 0
     });
