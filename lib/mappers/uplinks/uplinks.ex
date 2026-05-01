@@ -6,12 +6,13 @@ defmodule Mappers.Uplinks do
   alias Mappers.H3.Links.Link
 
   def create(message) do
-    uplink = %{}
+    uplink =
+      %{}
       |> Map.put(:app_eui, message["app_eui"])
       |> Map.put(:dev_eui, message["dev_eui"])
       |> Map.put(:device_id, message["id"])
       |> Map.put(:fcnt, message["fcnt"])
-      |> Map.put(:first_timestamp, round(message["reported_at"]/1000) |> DateTime.from_unix!())
+      |> Map.put(:first_timestamp, round(message["reported_at"] / 1000) |> DateTime.from_unix!())
       |> Map.put(:frequency, Enum.at(message["hotspots"], 0)["frequency"])
       |> Map.put(:altitude, message["decoded"]["payload"]["altitude"] |> round)
       |> Map.put(:gps_accuracy, message["decoded"]["payload"]["accuracy"])
@@ -29,26 +30,33 @@ defmodule Mappers.Uplinks do
   def get_uplinks(h3_index) do
     query =
       from u in Uplink,
-      join: uh in UplinkHeard,
-      on: u.id == uh.uplink_id,
-      join: h3 in Link,
-      on: h3.uplink_id == u.id,
-      where: h3.h3_res9_id == ^h3_index,
-      distinct: [uh.hotspot_name],
-      order_by: [desc: uh.rssi],
-      limit: 1500,
-      select: %{
-        uplink_heard_id: uh.id,
-        hotspot_name: uh.hotspot_name,
-        gateway_eui: uh.gateway_eui,
-        relay_gateway_eui: uh.relay_gateway_eui,
-        rssi: uh.rssi,
-        snr: uh.snr,
-        lat: uh.latitude,
-        lng: uh.longitude,
-        timestamp: uh.timestamp
-      }
+        join: uh in UplinkHeard,
+        on: u.id == uh.uplink_id,
+        join: h3 in Link,
+        on: h3.uplink_id == u.id,
+        where: h3.h3_res9_id == ^h3_index,
+        # Hide the "device_only" placeholder rows that
+        # `Mappers.Ingest.Validate.validate_hotspots/3` synthesizes when all
+        # real hotspots in a payload fail validation. These rows exist purely
+        # to keep H3.create's best_rssi/snr computation working when no real
+        # gateway was identifiable; surfacing them in the InfoPane shows up as
+        # a misleading "Device → Device_only" link in the UI.
+        where: uh.hotspot_address != "device_only",
+        distinct: [uh.hotspot_name],
+        order_by: [desc: uh.rssi],
+        limit: 1500,
+        select: %{
+          uplink_heard_id: uh.id,
+          hotspot_name: uh.hotspot_name,
+          gateway_eui: uh.gateway_eui,
+          relay_gateway_eui: uh.relay_gateway_eui,
+          rssi: uh.rssi,
+          snr: uh.snr,
+          lat: uh.latitude,
+          lng: uh.longitude,
+          timestamp: uh.timestamp
+        }
 
-      Repo.all(query)
+    Repo.all(query)
   end
 end
