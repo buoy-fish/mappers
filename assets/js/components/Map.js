@@ -85,6 +85,33 @@ const SATELLITE_LIGHT_TREATMENT = {
 
 function applySatelliteTreatment(map, treatment) {
     const layers = map.getStyle()?.layers || [];
+    // #region agent log
+    try {
+        const allLayers = layers.map(l => ({ id: l.id, type: l.type, source: l.source }));
+        const rasterLayers = layers.filter(l => l.type === "raster");
+        const sources = map.getStyle()?.sources || {};
+        const rasterSources = Object.entries(sources).filter(([_, s]) => s && (s.type === "raster" || s.type === "raster-dem")).map(([id, s]) => ({ id, type: s.type }));
+        const payload = {
+            sessionId: 'f70c37', runId: 'pre-fix-1', hypothesisId: 'A,B,C,D',
+            location: 'Map.js:applySatelliteTreatment',
+            message: 'apply called',
+            data: {
+                perfNow: Math.round(performance.now()),
+                treatmentKeys: Object.keys(treatment),
+                isLightMode: treatment["raster-saturation"] === undefined,
+                styleLoaded: map.isStyleLoaded(),
+                tilesLoaded: typeof map.areTilesLoaded === "function" ? map.areTilesLoaded() : null,
+                totalLayers: layers.length,
+                rasterLayers: rasterLayers.map(l => ({ id: l.id, source: l.source })),
+                rasterSources,
+                allLayerTypes: [...new Set(allLayers.map(l => l.type))],
+            },
+            timestamp: Date.now(),
+        };
+        console.log('[DEBUG-SAT] applySatelliteTreatment', payload.data);
+        fetch('http://127.0.0.1:7821/ingest/eb093061-f534-4da7-ac4f-47b78341fc6b', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f70c37' }, body: JSON.stringify(payload) }).catch(() => { });
+    } catch (e) { console.warn('[DEBUG-SAT] log failed', e); }
+    // #endregion
     layers.forEach((layer) => {
         if (layer.type !== "raster") return;
         Object.entries(treatment).forEach(([prop, value]) => {
@@ -95,6 +122,24 @@ function applySatelliteTreatment(map, treatment) {
             }
         });
     });
+    // #region agent log
+    try {
+        const after = layers.filter(l => l.type === "raster").map(l => ({
+            id: l.id,
+            satNow: map.getPaintProperty(l.id, 'raster-saturation'),
+            brightMaxNow: map.getPaintProperty(l.id, 'raster-brightness-max'),
+        }));
+        const payload = {
+            sessionId: 'f70c37', runId: 'pre-fix-1', hypothesisId: 'B,C,D',
+            location: 'Map.js:applySatelliteTreatment:after',
+            message: 'paint props after setPaintProperty',
+            data: { perfNow: Math.round(performance.now()), after },
+            timestamp: Date.now(),
+        };
+        console.log('[DEBUG-SAT] paint after', payload.data);
+        fetch('http://127.0.0.1:7821/ingest/eb093061-f534-4da7-ac4f-47b78341fc6b', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f70c37' }, body: JSON.stringify(payload) }).catch(() => { });
+    } catch (e) { console.warn('[DEBUG-SAT] log failed', e); }
+    // #endregion
 }
 
 var selectedStateIdTile = null;
@@ -110,6 +155,42 @@ function Map(props) {
         pitch: 0
     });
     const mapRef = useRef(null);
+    // #region agent log
+    const debugListenersAttachedRef = useRef(false);
+    const setMapRef = useCallback((r) => {
+        mapRef.current = r;
+        if (!r || debugListenersAttachedRef.current) return;
+        const m = r.getMap?.();
+        if (!m) return;
+        debugListenersAttachedRef.current = true;
+        const log = (msg, data, hyp) => {
+            const payload = { sessionId: 'f70c37', runId: 'pre-fix-1', hypothesisId: hyp, location: 'Map.js:setMapRef', message: msg, data: { perfNow: Math.round(performance.now()), ...data }, timestamp: Date.now() };
+            console.log('[DEBUG-SAT]', msg, payload.data);
+            fetch('http://127.0.0.1:7821/ingest/eb093061-f534-4da7-ac4f-47b78341fc6b', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f70c37' }, body: JSON.stringify(payload) }).catch(() => { });
+        };
+        log('ref-attached', { isStyleLoaded: m.isStyleLoaded(), areTilesLoaded: typeof m.areTilesLoaded === "function" ? m.areTilesLoaded() : null }, 'A');
+        m.on('style.load', () => {
+            const layers = m.getStyle()?.layers || [];
+            log('style.load fired (early listener)', { rasterLayerCount: layers.filter(l => l.type === "raster").length, areTilesLoaded: m.areTilesLoaded() }, 'A,C');
+        });
+        m.on('idle', () => log('idle (first paint complete)', {}, 'B,D'));
+        m.on('data', (e) => {
+            if (e.dataType === "source" && e.tile) log('first tile painted', { sourceId: e.sourceId, sourceType: e.source?.type }, 'B,D');
+        });
+        // CSS sanity check: hypothesis E
+        setTimeout(() => {
+            try {
+                const c = document.querySelector('.map-container');
+                const canvas = document.querySelector('.maplibregl-canvas, .mapboxgl-canvas');
+                log('css-bg-check', {
+                    mapContainerBg: c ? getComputedStyle(c).backgroundColor : null,
+                    canvasBg: canvas ? getComputedStyle(canvas).backgroundColor : null,
+                    canvasParentBg: canvas?.parentElement ? getComputedStyle(canvas.parentElement).backgroundColor : null,
+                }, 'E');
+            } catch (_) { }
+        }, 50);
+    }, []);
+    // #endregion
     // Ref to synchronously track which hex was loaded by a user click.
     // Unlike useState, refs update immediately and are available in closures
     // without waiting for a re-render. This prevents the location useEffect
@@ -526,6 +607,13 @@ function Map(props) {
                 onClick={onClick}
                 onLoad={USE_MAPBOX ? (e) => {
                     const m = e.target;
+                    // #region agent log
+                    try {
+                        const payload = { sessionId: 'f70c37', runId: 'pre-fix-1', hypothesisId: 'A,B', location: 'Map.js:onLoad', message: 'onLoad fired', data: { perfNow: Math.round(performance.now()), isStyleLoaded: m.isStyleLoaded(), areTilesLoaded: m.areTilesLoaded() }, timestamp: Date.now() };
+                        console.log('[DEBUG-SAT] onLoad fired', payload.data);
+                        fetch('http://127.0.0.1:7821/ingest/eb093061-f534-4da7-ac4f-47b78341fc6b', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f70c37' }, body: JSON.stringify(payload) }).catch(() => { });
+                    } catch (_) { }
+                    // #endregion
                     // Apply once now in case style.load already fired.
                     applySatelliteTreatment(m, darkSatellite ? SATELLITE_DARK_TREATMENT : SATELLITE_LIGHT_TREATMENT);
                     // Also re-apply on every subsequent style.load — fires
@@ -536,7 +624,7 @@ function Map(props) {
                         applySatelliteTreatment(m, darkSatellite ? SATELLITE_DARK_TREATMENT : SATELLITE_LIGHT_TREATMENT);
                     });
                 } : undefined}
-                ref={mapRef}
+                ref={setMapRef}
                 interactiveLayerIds={interactiveLayerIds}
             >
                 <GeolocateControl
