@@ -21,11 +21,18 @@ defmodule Mappers.H3 do
         rssi_r = hotspot["rssi"]
         snr_r = hotspot["snr"]
 
+        # `true ->` fallback defaults nil/unexpected types to a sentinel value
+        # rather than raising CondClauseError. Since Ingest.ingest_uplink/1 now
+        # substitutes the validated hotspot list into normalized_message, we
+        # should never hit nil rssi/snr here in practice — this is defense in
+        # depth so a future code path that bypasses validation can't re-break
+        # the pipeline.
         rssi =
           cond do
             is_float(rssi_r) -> rssi_r
             is_integer(rssi_r) -> rssi_r * 1.0
             is_binary(rssi_r) -> Float.parse(rssi_r) |> elem(0)
+            true -> -150.0
           end
 
         snr =
@@ -33,16 +40,20 @@ defmodule Mappers.H3 do
             is_float(snr_r) -> snr_r
             is_integer(snr_r) -> snr_r * 1.0
             is_binary(snr_r) -> Float.parse(snr_r) |> elem(0)
+            true -> 0.0
           end
 
         [{rssi, snr} | list]
       end)
 
-    # find best rssi
+    # find best rssi (defensive against an empty list — same belt-and-suspenders
+    # rationale as the cond fallbacks above; ingest substitutes the validated
+    # list which always has ≥1 entry).
     best_new_rssi_pair =
-      Enum.max_by(rssi_snr_list, fn x ->
-        elem(x, 0)
-      end)
+      case rssi_snr_list do
+        [] -> {-150.0, 0.0}
+        list -> Enum.max_by(list, fn x -> elem(x, 0) end)
+      end
 
     # check if h3 index exist in the db
     if res9_temp != nil do

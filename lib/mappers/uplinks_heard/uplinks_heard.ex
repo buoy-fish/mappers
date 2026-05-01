@@ -27,18 +27,16 @@ defmodule Mappers.UplinksHeard do
         |> Map.put(:longitude, hotspot["long"])
         |> Map.put(:rssi, hotspot["rssi"])
         |> Map.put(:snr, hotspot["snr"])
-        |> Map.put(
-          :timestamp,
-          round(hotspot["reported_at"] / 1000) |> DateTime.from_unix!()
-        )
+        |> Map.put(:timestamp, parse_hotspot_timestamp(hotspot["reported_at"]))
         |> Map.put(:uplink_id, uplink_id)
       end)
 
     changeset_insert_results = insert_uplinks_heard(uplinks_heard)
 
-    changeset_results = Enum.map(changeset_insert_results, fn {_, {_, changeset}} ->
-      changeset
-    end)
+    changeset_results =
+      Enum.map(changeset_insert_results, fn {_, {_, changeset}} ->
+        changeset
+      end)
 
     results =
       Enum.find(changeset_results, fn changeset ->
@@ -61,5 +59,18 @@ defmodule Mappers.UplinksHeard do
     %UplinkHeard{}
     |> UplinkHeard.changeset(uplink_heard)
     |> Repo.insert()
+  end
+
+  # Per-hotspot reception time. Comes in as unix milliseconds (from
+  # Ingest.normalize_payload's parse_reported_at/1) or nil. nil happens for:
+  #   - device-only placeholder hotspots (no real reception event)
+  #   - rxInfo entries from upstream that lacked both `time` and `gwTime`
+  # Default to current UTC time so the row insert succeeds. Losing precise
+  # per-gateway reception time is preferable to dropping the whole uplink
+  # (and the H3 hex it would have painted).
+  defp parse_hotspot_timestamp(nil), do: DateTime.utc_now()
+
+  defp parse_hotspot_timestamp(ts) when is_number(ts) do
+    round(ts / 1000) |> DateTime.from_unix!()
   end
 end

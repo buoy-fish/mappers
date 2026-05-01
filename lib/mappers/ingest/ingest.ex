@@ -27,6 +27,16 @@ defmodule Mappers.Ingest do
             %{error: reason}
 
           {:ok, hotspots} ->
+            # Substitute the validated hotspot list back into normalized_message
+            # so every downstream consumer (H3.create, Uplinks.create,
+            # UplinksHeard.create) sees the same list. Without this, H3.create
+            # and Uplinks.create read the unvalidated original list and crash
+            # when entries have nil rssi/snr or when the list is empty.
+            # The validator always returns ≥1 entry — either real hotspots that
+            # passed validation, or a "device_only" placeholder synthesized at
+            # the device's GPS location.
+            normalized_message = Map.put(normalized_message, "hotspots", hotspots)
+
             # create new h3_res9 record if it doesn't exist
             H3.create(normalized_message)
             |> case do
@@ -97,11 +107,13 @@ defmodule Mappers.Ingest do
       end
 
     # Fall back to first rxInfo time if top-level time is missing
-    top_time = message["time"] || get_in(message, ["rxInfo", Access.at(0), "time"]) ||
-               get_in(message, ["rxInfo", Access.at(0), "gwTime"])
+    top_time =
+      message["time"] || get_in(message, ["rxInfo", Access.at(0), "time"]) ||
+        get_in(message, ["rxInfo", Access.at(0), "gwTime"])
 
     normalized_message = %{
-      "app_eui" => "0000000000000000", # ChirpStack does not provide this field
+      # ChirpStack does not provide this field
+      "app_eui" => "0000000000000000",
       "dev_eui" => get_in(message, ["deviceInfo", "devEui"]),
       "id" => message["deduplicationId"],
       "fcnt" => message["fCnt"],
@@ -192,20 +204,24 @@ defmodule Mappers.Ingest do
   # Convert string or numeric lat/long values to float safely
   defp to_float(val) when is_float(val), do: val
   defp to_float(val) when is_integer(val), do: val * 1.0
+
   defp to_float(val) when is_binary(val) do
     case Float.parse(val) do
       {f, _} -> f
       :error -> 0.0
     end
   end
+
   defp to_float(_), do: 0.0
 
   defp parse_reported_at(nil), do: nil
+
   defp parse_reported_at(timestamp) when is_binary(timestamp) do
     case DateTime.from_iso8601(timestamp) do
       {:ok, datetime, _offset} -> DateTime.to_unix(datetime, :millisecond)
       _ -> nil
     end
   end
+
   defp parse_reported_at(_), do: nil
 end
