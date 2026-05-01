@@ -39,9 +39,12 @@ const MAPBOX_TOKEN = process.env.MAPBOX_ACCESS_TOKEN;
 const USE_MAPBOX = typeof MAPBOX_TOKEN === "string" && MAPBOX_TOKEN.startsWith("pk.");
 
 const MAP_STYLES = {
-    // Upstream Helium Mappers' style (custom Maxar satellite + topography,
-    // curated by Mapbox user `petermain`). Requires MAPBOX_ACCESS_TOKEN.
-    mapbox: "mapbox://styles/petermain/ckmwdn50a1ebk17o3h5e6wwui",
+    // Mapbox first-party Maxar satellite + roads/labels. Visually equivalent
+    // to upstream Helium Mappers' look. We previously tried upstream's exact
+    // style (`mapbox://styles/petermain/ckmwdn50a1ebk17o3h5e6wwui`) but it's
+    // private to that user's Mapbox account and returns HTTP 404 to our
+    // token. Mapbox-owned styles are public to any valid `pk.` token.
+    mapbox: "mapbox://styles/mapbox/satellite-streets-v12",
     // Open-source fallback. No API key, no satellite imagery.
     carto: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
 };
