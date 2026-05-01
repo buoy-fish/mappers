@@ -83,6 +83,25 @@ const SATELLITE_LIGHT_TREATMENT = {
     "raster-hue-rotate": undefined,
 };
 
+// #region agent log
+// Window-buffer logger. Browser fetches to http://127.0.0.1 are blocked by
+// Brave's mixed-content policy (and possibly other browsers) when the page
+// is HTTPS, so we push events to window.__satlog instead. User copies the
+// buffer to the clipboard via `copy(JSON.stringify(window.__satlog, null, 2))`
+// in DevTools console.
+function __debugLog(location, message, data, hypothesisId, runId) {
+    try {
+        const evt = { perfNow: Math.round(performance.now()), location, message, data, hypothesisId, runId, ts: Date.now() };
+        if (typeof window !== "undefined") {
+            window.__satlog = window.__satlog || [];
+            window.__satlog.push(evt);
+        }
+        console.log('[DEBUG-SAT]', message, data);
+        fetch('http://127.0.0.1:7821/ingest/eb093061-f534-4da7-ac4f-47b78341fc6b', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f70c37' }, body: JSON.stringify({ sessionId: 'f70c37', runId, hypothesisId, location, message, data, timestamp: Date.now() }) }).catch(() => { });
+    } catch (_) { }
+}
+// #endregion
+
 function applySatelliteTreatment(map, treatment) {
     const layers = map.getStyle()?.layers || [];
     // #region agent log
@@ -91,26 +110,17 @@ function applySatelliteTreatment(map, treatment) {
         const rasterLayers = layers.filter(l => l.type === "raster");
         const sources = map.getStyle()?.sources || {};
         const rasterSources = Object.entries(sources).filter(([_, s]) => s && (s.type === "raster" || s.type === "raster-dem")).map(([id, s]) => ({ id, type: s.type }));
-        const payload = {
-            sessionId: 'f70c37', runId: 'pre-fix-1', hypothesisId: 'A,B,C,D',
-            location: 'Map.js:applySatelliteTreatment',
-            message: 'apply called',
-            data: {
-                perfNow: Math.round(performance.now()),
-                treatmentKeys: Object.keys(treatment),
-                isLightMode: treatment["raster-saturation"] === undefined,
-                styleLoaded: map.isStyleLoaded(),
-                tilesLoaded: typeof map.areTilesLoaded === "function" ? map.areTilesLoaded() : null,
-                totalLayers: layers.length,
-                rasterLayers: rasterLayers.map(l => ({ id: l.id, source: l.source })),
-                rasterSources,
-                allLayerTypes: [...new Set(allLayers.map(l => l.type))],
-            },
-            timestamp: Date.now(),
-        };
-        console.log('[DEBUG-SAT] applySatelliteTreatment', payload.data);
-        fetch('http://127.0.0.1:7821/ingest/eb093061-f534-4da7-ac4f-47b78341fc6b', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f70c37' }, body: JSON.stringify(payload) }).catch(() => { });
-    } catch (e) { console.warn('[DEBUG-SAT] log failed', e); }
+        __debugLog('Map.js:applySatelliteTreatment', 'apply called', {
+            treatmentKeys: Object.keys(treatment),
+            isLightMode: treatment["raster-saturation"] === undefined,
+            styleLoaded: map.isStyleLoaded(),
+            tilesLoaded: typeof map.areTilesLoaded === "function" ? map.areTilesLoaded() : null,
+            totalLayers: layers.length,
+            rasterLayers: rasterLayers.map(l => ({ id: l.id, source: l.source })),
+            rasterSources,
+            allLayerTypes: [...new Set(allLayers.map(l => l.type))],
+        }, 'A,B,C,D', 'post-fix-2');
+    } catch (_) { }
     // #endregion
     layers.forEach((layer) => {
         if (layer.type !== "raster") return;
@@ -129,16 +139,8 @@ function applySatelliteTreatment(map, treatment) {
             satNow: map.getPaintProperty(l.id, 'raster-saturation'),
             brightMaxNow: map.getPaintProperty(l.id, 'raster-brightness-max'),
         }));
-        const payload = {
-            sessionId: 'f70c37', runId: 'pre-fix-1', hypothesisId: 'B,C,D',
-            location: 'Map.js:applySatelliteTreatment:after',
-            message: 'paint props after setPaintProperty',
-            data: { perfNow: Math.round(performance.now()), after },
-            timestamp: Date.now(),
-        };
-        console.log('[DEBUG-SAT] paint after', payload.data);
-        fetch('http://127.0.0.1:7821/ingest/eb093061-f534-4da7-ac4f-47b78341fc6b', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f70c37' }, body: JSON.stringify(payload) }).catch(() => { });
-    } catch (e) { console.warn('[DEBUG-SAT] log failed', e); }
+        __debugLog('Map.js:applySatelliteTreatment:after', 'paint props after setPaintProperty', { after }, 'B,C,D', 'post-fix-2');
+    } catch (_) { }
     // #endregion
 }
 
@@ -169,11 +171,7 @@ function Map(props) {
         if (!m) return;
         debugListenersAttachedRef.current = true;
         // #region agent log
-        const log = (msg, data, hyp) => {
-            const payload = { sessionId: 'f70c37', runId: 'post-fix-1', hypothesisId: hyp, location: 'Map.js:setMapRef', message: msg, data: { perfNow: Math.round(performance.now()), ...data }, timestamp: Date.now() };
-            console.log('[DEBUG-SAT]', msg, payload.data);
-            fetch('http://127.0.0.1:7821/ingest/eb093061-f534-4da7-ac4f-47b78341fc6b', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f70c37' }, body: JSON.stringify(payload) }).catch(() => { });
-        };
+        const log = (msg, data, hyp) => __debugLog('Map.js:setMapRef', msg, data, hyp, 'post-fix-2');
         log('ref-attached', { isStyleLoaded: m.isStyleLoaded(), areTilesLoaded: typeof m.areTilesLoaded === "function" ? m.areTilesLoaded() : null }, 'A');
         // #endregion
         // CRITICAL FIX: apply the satellite treatment as soon as style.load
@@ -624,11 +622,7 @@ function Map(props) {
                 onLoad={USE_MAPBOX ? (e) => {
                     const m = e.target;
                     // #region agent log
-                    try {
-                        const payload = { sessionId: 'f70c37', runId: 'pre-fix-1', hypothesisId: 'A,B', location: 'Map.js:onLoad', message: 'onLoad fired', data: { perfNow: Math.round(performance.now()), isStyleLoaded: m.isStyleLoaded(), areTilesLoaded: m.areTilesLoaded() }, timestamp: Date.now() };
-                        console.log('[DEBUG-SAT] onLoad fired', payload.data);
-                        fetch('http://127.0.0.1:7821/ingest/eb093061-f534-4da7-ac4f-47b78341fc6b', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f70c37' }, body: JSON.stringify(payload) }).catch(() => { });
-                    } catch (_) { }
+                    __debugLog('Map.js:onLoad', 'onLoad fired', { isStyleLoaded: m.isStyleLoaded(), areTilesLoaded: m.areTilesLoaded() }, 'A,B', 'post-fix-2');
                     // #endregion
                     // Belt-and-suspenders: in case the early style.load
                     // listener (registered in setMapRef) hasn't fired yet for
