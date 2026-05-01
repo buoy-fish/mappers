@@ -1,7 +1,15 @@
 import * as React from 'react';
 import { useState, useRef, useCallback } from 'react';
-import MapGL, { Source, Layer, GeolocateControl, NavigationControl } from 'react-map-gl/maplibre';
+// Both renderers are imported up-front. We pick which one to mount at runtime
+// based on whether a Mapbox token was injected at build time. Bundling both
+// adds ~200KB; trivial for a low-traffic mapping app and avoids dynamic-import
+// complexity. Source / Layer / GeolocateControl / NavigationControl are shape-
+// identical between the two submodules — they're generic wrappers around the
+// same Style Spec — so we import them from /maplibre by convention.
+import { Map as MapboxMap } from 'react-map-gl/mapbox';
+import { Map as MaplibreMap, Source, Layer, GeolocateControl, NavigationControl } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import 'mapbox-gl/dist/mapbox-gl.css';
 import InfoPane from "../components/InfoPane"
 import WelcomeModal from "../components/WelcomeModal"
 import { uplinkTileServerLayer, uplinkHotspotsLineLayer, uplinkRelayLineLayer, uplinkHotspotsCircleLayer, uplinkHotspotsHexLayer, uplinkChannelLayer, gatewayMarkerLayer, gatewayLabelLayer, selectedHexLayer } from './Layers.js';
@@ -13,8 +21,32 @@ import useLocalStorageState from 'use-local-storage-state';
 import '../../css/app.css';
 import { useNavigate, useLocation } from "react-router-dom";
 
-// Open-source map style (no API key needed)
-const MAP_STYLE = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
+// ============================================================================
+// Basemap selection
+// ----------------------------------------------------------------------------
+// MAPBOX_ACCESS_TOKEN is inlined at build time by esbuild's `define` (see
+// assets/build.mjs). When set, we use Mapbox's Maxar satellite + topography
+// style for byte-for-byte parity with upstream Helium Mappers. When unset
+// (e.g. local dev, CI, or after deliberately clearing the env var to dodge
+// Mapbox usage costs), we fall back to CartoCDN's open-source dark-matter
+// style — no API key required, but no satellite imagery either.
+//
+// To toggle: set/unset MAPBOX_ACCESS_TOKEN in the env where `npm run deploy`
+// runs (production: /home/ubuntu/map.buoy.fish/.env), then rebuild assets.
+// ============================================================================
+const MAPBOX_TOKEN = process.env.MAPBOX_ACCESS_TOKEN;
+const USE_MAPBOX = typeof MAPBOX_TOKEN === "string" && MAPBOX_TOKEN.startsWith("pk.");
+
+const MAP_STYLES = {
+    // Upstream Helium Mappers' style (custom Maxar satellite + topography,
+    // curated by Mapbox user `petermain`). Requires MAPBOX_ACCESS_TOKEN.
+    mapbox: "mapbox://styles/petermain/ckmwdn50a1ebk17o3h5e6wwui",
+    // Open-source fallback. No API key, no satellite imagery.
+    carto: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+};
+
+const MAP_STYLE = USE_MAPBOX ? MAP_STYLES.mapbox : MAP_STYLES.carto;
+const MapGL = USE_MAPBOX ? MapboxMap : MaplibreMap;
 
 var selectedStateIdTile = null;
 var selectedStateIdChannel = null;
@@ -427,6 +459,7 @@ function Map(props) {
                 onMove={evt => setViewState(evt.viewState)}
                 style={{ width: "100vw", height: "100vh" }}
                 mapStyle={MAP_STYLE}
+                mapboxAccessToken={USE_MAPBOX ? MAPBOX_TOKEN : undefined}
                 onClick={onClick}
                 ref={mapRef}
                 interactiveLayerIds={interactiveLayerIds}

@@ -60,9 +60,14 @@ const buildOptions = {
     ".ttf": "file",
     ".eot": "file",
   },
-  // Needed for Phoenix's --watch-stdin protocol
+  // Inline `process.env.X` references at build time. The MAPBOX_ACCESS_TOKEN
+  // is a public Mapbox token (pk.eyJ...) — designed to be exposed in the
+  // browser and protected via URL restrictions in the Mapbox dashboard.
+  // When unset, JSON.stringify(undefined) yields the literal string "undefined"
+  // which Map.js treats as "no token" and falls back to the CartoCDN style.
   define: {
     "process.env.NODE_ENV": deploy ? '"production"' : '"development"',
+    "process.env.MAPBOX_ACCESS_TOKEN": JSON.stringify(process.env.MAPBOX_ACCESS_TOKEN || ""),
   },
   logLevel: "info",
 }
