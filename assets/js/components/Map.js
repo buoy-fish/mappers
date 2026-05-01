@@ -157,11 +157,6 @@ function Map(props) {
         pitch: 0
     });
     const mapRef = useRef(null);
-    // Mirror darkSatellite into a ref so the early style.load listener
-    // (registered once at mount) reads the current value rather than the
-    // stale closure-captured value from mount time.
-    const darkSatelliteRef = useRef(darkSatellite);
-    React.useEffect(() => { darkSatelliteRef.current = darkSatellite; }, [darkSatellite]);
 
     const debugListenersAttachedRef = useRef(false);
     const setMapRef = useCallback((r) => {
@@ -232,6 +227,12 @@ function Map(props) {
     // see the visually punchy treatment that lets coverage hexes pop. Persisted
     // per-browser via localStorage so users keep their preference across visits.
     const [darkSatellite, setDarkSatellite] = useLocalStorageState('darkSatellite_v1', { defaultValue: true });
+    // Mirror darkSatellite into a ref so the early style.load listener
+    // (registered once at mount, in setMapRef) reads the current value rather
+    // than the stale closure-captured value from mount time. Must be declared
+    // AFTER darkSatellite to avoid a TDZ error when minified.
+    const darkSatelliteRef = useRef(darkSatellite);
+    React.useEffect(() => { darkSatelliteRef.current = darkSatellite; }, [darkSatellite]);
 
     const selectedHexGeoJson = React.useMemo(() => {
         if (!hexId || !showHexPane) return emptyFC;
