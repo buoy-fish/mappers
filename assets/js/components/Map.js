@@ -52,6 +52,40 @@ const MAP_STYLES = {
 const MAP_STYLE = USE_MAPBOX ? MAP_STYLES.mapbox : MAP_STYLES.carto;
 const MapGL = USE_MAPBOX ? MapboxMap : MaplibreMap;
 
+// Dark / desaturated raster treatment applied at runtime to the satellite
+// imagery layers, mimicking upstream Helium Mappers' look (whose effect lives
+// in a private Mapbox Studio style we can't access).
+//
+// Tweak these knobs to taste:
+//   raster-saturation:      -1 (gray) to 1 (vivid)
+//   raster-brightness-min:  0 to 1 (raise to crush blacks; usually leave 0)
+//   raster-brightness-max:  0 to 1 (lower to darken highlights — main "darken" knob)
+//   raster-contrast:        -1 to 1 (negative = flatter, positive = punchier)
+//   raster-hue-rotate:      0 to 360° (210ish gives a cool/blue cast)
+//
+// Applied only when USE_MAPBOX is true (the CartoCDN fallback is already dark
+// and vector-only — no raster layers to treat).
+const SATELLITE_DARK_TREATMENT = {
+    "raster-saturation": -0.6,
+    "raster-brightness-max": 0.45,
+    "raster-contrast": -0.05,
+    "raster-hue-rotate": 210,
+};
+
+function applySatelliteDarkTreatment(map) {
+    const layers = map.getStyle()?.layers || [];
+    layers.forEach((layer) => {
+        if (layer.type !== "raster") return;
+        Object.entries(SATELLITE_DARK_TREATMENT).forEach(([prop, value]) => {
+            try {
+                map.setPaintProperty(layer.id, prop, value);
+            } catch (_) {
+                // Some raster layers lock certain paint properties; skip silently.
+            }
+        });
+    });
+}
+
 var selectedStateIdTile = null;
 var selectedStateIdChannel = null;
 const channel = socket.channel("h3:new")
@@ -465,6 +499,12 @@ function Map(props) {
                 mapStyle={MAP_STYLE}
                 mapboxAccessToken={USE_MAPBOX ? MAPBOX_TOKEN : undefined}
                 onClick={onClick}
+                onLoad={USE_MAPBOX ? (e) => {
+                    const m = e.target;
+                    applySatelliteDarkTreatment(m);
+                    // Re-apply if the style ever reloads (e.g. theme switch in future).
+                    m.on("style.load", () => applySatelliteDarkTreatment(m));
+                } : undefined}
                 ref={mapRef}
                 interactiveLayerIds={interactiveLayerIds}
             >
