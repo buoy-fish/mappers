@@ -179,6 +179,23 @@ function InfoPane(props) {
                             <span>Show Gateways</span>
                         </label>
                     </div>
+                    {/* Only show the dark/light toggle when the Mapbox basemap is in use.
+                        With the CartoCDN fallback there are no raster layers to treat. */}
+                    {props.onToggleDarkSatellite &&
+                        <div className="legend-line gateway-toggle-line">
+                            <label className="gateway-toggle">
+                                <button
+                                    role="switch"
+                                    aria-checked={props.darkSatellite}
+                                    onClick={props.onToggleDarkSatellite}
+                                    className={`gateway-switch ${props.darkSatellite ? 'active' : ''}`}
+                                >
+                                    <span className="gateway-switch-knob" />
+                                </button>
+                                <span>Dark Satellite</span>
+                            </label>
+                        </div>
+                    }
                     {props.showGateways &&
                         <div className="legend-line gateway-toggle-line">
                             <label className="gateway-toggle">

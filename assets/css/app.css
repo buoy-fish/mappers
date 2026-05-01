@@ -22,6 +22,19 @@ body {
   right: 0;
   left: 0;
   bottom: 0;
+  /* Dark background so the brief moment before tiles render is dark, not
+     bright white. Avoids the "going dark" flash users saw when satellite
+     tiles loaded bright and then got the dark paint treatment a few frames
+     later. Matches the dark-satellite end state; light-satellite users will
+     see this for ~50ms but it's preferable to a flash of white. */
+  background: #0a0e14;
+}
+
+/* Same dark backdrop on the underlying GL canvas so the area outside the
+   currently-loaded tile set is dark instead of transparent / page-white. */
+.maplibregl-map,
+.mapboxgl-map {
+  background: #0a0e14;
 }
 
 .geolocate-button {

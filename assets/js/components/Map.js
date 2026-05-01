@@ -61,22 +61,33 @@ const MapGL = USE_MAPBOX ? MapboxMap : MaplibreMap;
 //   raster-brightness-min:  0 to 1 (raise to crush blacks; usually leave 0)
 //   raster-brightness-max:  0 to 1 (lower to darken highlights — main "darken" knob)
 //   raster-contrast:        -1 to 1 (negative = flatter, positive = punchier)
-//   raster-hue-rotate:      0 to 360° (210ish gives a cool/blue cast)
+//   raster-hue-rotate:      0 to 360° (omit; rotation produces orange halos at
+//                                       coastline edges where tiles get bilinear
+//                                       resampling, since partial-saturation
+//                                       pixels wrap around the color wheel)
 //
 // Applied only when USE_MAPBOX is true (the CartoCDN fallback is already dark
 // and vector-only — no raster layers to treat).
 const SATELLITE_DARK_TREATMENT = {
-    "raster-saturation": -0.6,
+    "raster-saturation": -0.85,
     "raster-brightness-max": 0.45,
     "raster-contrast": -0.05,
-    "raster-hue-rotate": 210,
+    "raster-hue-rotate": 0,
 };
 
-function applySatelliteDarkTreatment(map) {
+// "Light" mode = clear back to Mapbox's default paint values.
+const SATELLITE_LIGHT_TREATMENT = {
+    "raster-saturation": undefined,
+    "raster-brightness-max": undefined,
+    "raster-contrast": undefined,
+    "raster-hue-rotate": undefined,
+};
+
+function applySatelliteTreatment(map, treatment) {
     const layers = map.getStyle()?.layers || [];
     layers.forEach((layer) => {
         if (layer.type !== "raster") return;
-        Object.entries(SATELLITE_DARK_TREATMENT).forEach(([prop, value]) => {
+        Object.entries(treatment).forEach(([prop, value]) => {
             try {
                 map.setPaintProperty(layer.id, prop, value);
             } catch (_) {
@@ -122,6 +133,10 @@ function Map(props) {
     const [gatewayGeoJson, setGatewayGeoJson] = useState(emptyFC);
     const [showGateways, setShowGateways] = useState(false);
     const [hideCoverage, setHideCoverage] = useState(false);
+    // Dark/light satellite toggle. Default true (dark) so first-time visitors
+    // see the visually punchy treatment that lets coverage hexes pop. Persisted
+    // per-browser via localStorage so users keep their preference across visits.
+    const [darkSatellite, setDarkSatellite] = useLocalStorageState('darkSatellite_v1', { defaultValue: true });
 
     const selectedHexGeoJson = React.useMemo(() => {
         if (!hexId || !showHexPane) return emptyFC;
@@ -488,6 +503,16 @@ function Map(props) {
         }));
     }, []);
 
+    // Re-apply satellite treatment whenever the user toggles the theme.
+    // Initial application happens via the MapGL onLoad callback below; this
+    // effect only handles user-initiated toggles after the map is loaded.
+    React.useEffect(() => {
+        if (!USE_MAPBOX) return;
+        const map = mapRef.current?.getMap();
+        if (!map || !map.isStyleLoaded()) return;
+        applySatelliteTreatment(map, darkSatellite ? SATELLITE_DARK_TREATMENT : SATELLITE_LIGHT_TREATMENT);
+    }, [darkSatellite]);
+
     const interactiveLayerIds = ['public.h3_res9', 'uplinkChannelLayer'];
 
     return (
@@ -501,9 +526,15 @@ function Map(props) {
                 onClick={onClick}
                 onLoad={USE_MAPBOX ? (e) => {
                     const m = e.target;
-                    applySatelliteDarkTreatment(m);
-                    // Re-apply if the style ever reloads (e.g. theme switch in future).
-                    m.on("style.load", () => applySatelliteDarkTreatment(m));
+                    // Apply once now in case style.load already fired.
+                    applySatelliteTreatment(m, darkSatellite ? SATELLITE_DARK_TREATMENT : SATELLITE_LIGHT_TREATMENT);
+                    // Also re-apply on every subsequent style.load — fires
+                    // earlier than `load` (before first tiles render), so any
+                    // future style swap (and the initial load on slower
+                    // connections) won't flash through bright tiles first.
+                    m.on("style.load", () => {
+                        applySatelliteTreatment(m, darkSatellite ? SATELLITE_DARK_TREATMENT : SATELLITE_LIGHT_TREATMENT);
+                    });
                 } : undefined}
                 ref={mapRef}
                 interactiveLayerIds={interactiveLayerIds}
@@ -548,7 +579,7 @@ function Map(props) {
                 }
 
             </MapGL>
-            <InfoPane hexId={hexId} bestRssi={bestRssi} snr={snr} uplinks={uplinks} showHexPane={showHexPane} onCloseHexPaneClick={onCloseHexPaneClick} showHexPaneCloseButton={showHexPaneCloseButton} showGateways={showGateways} onToggleGateways={() => setShowGateways(!showGateways)} hideCoverage={hideCoverage} onToggleCoverage={() => setHideCoverage(!hideCoverage)} onFlyToProject={onFlyToProject} />
+            <InfoPane hexId={hexId} bestRssi={bestRssi} snr={snr} uplinks={uplinks} showHexPane={showHexPane} onCloseHexPaneClick={onCloseHexPaneClick} showHexPaneCloseButton={showHexPaneCloseButton} showGateways={showGateways} onToggleGateways={() => setShowGateways(!showGateways)} hideCoverage={hideCoverage} onToggleCoverage={() => setHideCoverage(!hideCoverage)} onFlyToProject={onFlyToProject} darkSatellite={darkSatellite} onToggleDarkSatellite={USE_MAPBOX ? () => setDarkSatellite(!darkSatellite) : null} />
             <WelcomeModal showWelcomeModal={showWelcomeModal} onCloseWelcomeModalClick={onCloseWelcomeModalClick} />
         </div>
     );
