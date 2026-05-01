@@ -23,7 +23,16 @@ function InfoPane(props) {
     }
 
     function recentTime() {
-        let sortedTimes = props.uplinks;
+        // Guard against empty uplinks: a hex can legitimately exist with zero
+        // heard records (e.g. older hexes painted before a downstream insert
+        // bug was fixed, or hexes whose uplinks_heard rows were purged).
+        // Without this guard, `sortedTimes[0].timestamp` crashes the whole
+        // info pane and bubbles up as a React render error.
+        if (!props.uplinks || props.uplinks.length === 0) {
+            return { full: "—", number: "—", unit: "" }
+        }
+
+        let sortedTimes = [...props.uplinks];
         sortedTimes.sort((a,b) => -a.timestamp.localeCompare(b.timestamp))
 
         let distTimeFull = formatDistanceToNowStrict(parseISO(sortedTimes[0].timestamp))
