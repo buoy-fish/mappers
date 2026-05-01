@@ -83,45 +83,8 @@ const SATELLITE_LIGHT_TREATMENT = {
     "raster-hue-rotate": undefined,
 };
 
-// #region agent log
-// Window-buffer logger. Browser fetches to http://127.0.0.1 are blocked by
-// Brave's mixed-content policy (and possibly other browsers) when the page
-// is HTTPS, so we push events to window.__satlog instead. User copies the
-// buffer to the clipboard via `copy(JSON.stringify(window.__satlog, null, 2))`
-// in DevTools console.
-function __debugLog(location, message, data, hypothesisId, runId) {
-    try {
-        const evt = { perfNow: Math.round(performance.now()), location, message, data, hypothesisId, runId, ts: Date.now() };
-        if (typeof window !== "undefined") {
-            window.__satlog = window.__satlog || [];
-            window.__satlog.push(evt);
-        }
-        console.log('[DEBUG-SAT]', message, data);
-        fetch('http://127.0.0.1:7821/ingest/eb093061-f534-4da7-ac4f-47b78341fc6b', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f70c37' }, body: JSON.stringify({ sessionId: 'f70c37', runId, hypothesisId, location, message, data, timestamp: Date.now() }) }).catch(() => { });
-    } catch (_) { }
-}
-// #endregion
-
 function applySatelliteTreatment(map, treatment) {
     const layers = map.getStyle()?.layers || [];
-    // #region agent log
-    try {
-        const allLayers = layers.map(l => ({ id: l.id, type: l.type, source: l.source }));
-        const rasterLayers = layers.filter(l => l.type === "raster");
-        const sources = map.getStyle()?.sources || {};
-        const rasterSources = Object.entries(sources).filter(([_, s]) => s && (s.type === "raster" || s.type === "raster-dem")).map(([id, s]) => ({ id, type: s.type }));
-        __debugLog('Map.js:applySatelliteTreatment', 'apply called', {
-            treatmentKeys: Object.keys(treatment),
-            isLightMode: treatment["raster-saturation"] === undefined,
-            styleLoaded: map.isStyleLoaded(),
-            tilesLoaded: typeof map.areTilesLoaded === "function" ? map.areTilesLoaded() : null,
-            totalLayers: layers.length,
-            rasterLayers: rasterLayers.map(l => ({ id: l.id, source: l.source })),
-            rasterSources,
-            allLayerTypes: [...new Set(allLayers.map(l => l.type))],
-        }, 'A,B,C,D', 'post-fix-2');
-    } catch (_) { }
-    // #endregion
     layers.forEach((layer) => {
         if (layer.type !== "raster") return;
         Object.entries(treatment).forEach(([prop, value]) => {
@@ -132,16 +95,6 @@ function applySatelliteTreatment(map, treatment) {
             }
         });
     });
-    // #region agent log
-    try {
-        const after = layers.filter(l => l.type === "raster").map(l => ({
-            id: l.id,
-            satNow: map.getPaintProperty(l.id, 'raster-saturation'),
-            brightMaxNow: map.getPaintProperty(l.id, 'raster-brightness-max'),
-        }));
-        __debugLog('Map.js:applySatelliteTreatment:after', 'paint props after setPaintProperty', { after }, 'B,C,D', 'post-fix-2');
-    } catch (_) { }
-    // #endregion
 }
 
 var selectedStateIdTile = null;
@@ -158,47 +111,25 @@ function Map(props) {
     });
     const mapRef = useRef(null);
 
-    const debugListenersAttachedRef = useRef(false);
+    // Ref-callback that doubles as our earliest hook into the underlying
+    // mapbox-gl map instance. We use it to register a `style.load` listener
+    // (which fires ~500 ms BEFORE the higher-level `onLoad` callback) so we
+    // can apply the dark-satellite treatment to raster layers BEFORE the
+    // first tiles render. Hooking from `onLoad` was too late — tiles had
+    // already painted with default bright values, producing the bright→dark
+    // flash users reported.
+    const styleLoadHandlerAttachedRef = useRef(false);
     const setMapRef = useCallback((r) => {
         mapRef.current = r;
-        if (!r || debugListenersAttachedRef.current) return;
+        if (!r || styleLoadHandlerAttachedRef.current) return;
         const m = r.getMap?.();
         if (!m) return;
-        debugListenersAttachedRef.current = true;
-        // #region agent log
-        const log = (msg, data, hyp) => __debugLog('Map.js:setMapRef', msg, data, hyp, 'post-fix-2');
-        log('ref-attached', { isStyleLoaded: m.isStyleLoaded(), areTilesLoaded: typeof m.areTilesLoaded === "function" ? m.areTilesLoaded() : null }, 'A');
-        // #endregion
-        // CRITICAL FIX: apply the satellite treatment as soon as style.load
-        // fires (before any tile renders). The previous fix registered this
-        // handler inside `onLoad`, which fires ~500 ms LATER — by then tiles
-        // had already painted with default bright values, causing the flash.
+        styleLoadHandlerAttachedRef.current = true;
         m.on('style.load', () => {
-            // #region agent log
-            const layers = m.getStyle()?.layers || [];
-            log('style.load fired (early listener) — applying treatment', { rasterLayerCount: layers.filter(l => l.type === "raster").length, areTilesLoaded: m.areTilesLoaded() }, 'A,C');
-            // #endregion
             if (USE_MAPBOX) {
                 applySatelliteTreatment(m, darkSatelliteRef.current ? SATELLITE_DARK_TREATMENT : SATELLITE_LIGHT_TREATMENT);
             }
         });
-        // #region agent log
-        m.on('idle', () => log('idle (first paint complete)', {}, 'B,D'));
-        m.on('data', (e) => {
-            if (e.dataType === "source" && e.tile) log('first tile painted', { sourceId: e.sourceId, sourceType: e.source?.type }, 'B,D');
-        });
-        setTimeout(() => {
-            try {
-                const c = document.querySelector('.map-container');
-                const canvas = document.querySelector('.maplibregl-canvas, .mapboxgl-canvas');
-                log('css-bg-check', {
-                    mapContainerBg: c ? getComputedStyle(c).backgroundColor : null,
-                    canvasBg: canvas ? getComputedStyle(canvas).backgroundColor : null,
-                    canvasParentBg: canvas?.parentElement ? getComputedStyle(canvas.parentElement).backgroundColor : null,
-                }, 'E');
-            } catch (_) { }
-        }, 50);
-        // #endregion
     }, []);
     // Ref to synchronously track which hex was loaded by a user click.
     // Unlike useState, refs update immediately and are available in closures
@@ -621,16 +552,13 @@ function Map(props) {
                 mapboxAccessToken={USE_MAPBOX ? MAPBOX_TOKEN : undefined}
                 onClick={onClick}
                 onLoad={USE_MAPBOX ? (e) => {
-                    const m = e.target;
-                    // #region agent log
-                    __debugLog('Map.js:onLoad', 'onLoad fired', { isStyleLoaded: m.isStyleLoaded(), areTilesLoaded: m.areTilesLoaded() }, 'A,B', 'post-fix-2');
-                    // #endregion
-                    // Belt-and-suspenders: in case the early style.load
-                    // listener (registered in setMapRef) hasn't fired yet for
-                    // any reason, apply the treatment now too. The primary
-                    // application path is the style.load listener — which
-                    // runs ~500ms earlier and BEFORE tiles render.
-                    applySatelliteTreatment(m, darkSatellite ? SATELLITE_DARK_TREATMENT : SATELLITE_LIGHT_TREATMENT);
+                    // Belt-and-suspenders: in the rare case the
+                    // ref-callback-attached `style.load` listener (in
+                    // setMapRef) hasn't fired yet, apply the treatment now
+                    // too. The primary application path is the style.load
+                    // listener — which fires ~500 ms earlier and BEFORE
+                    // tiles render, eliminating the bright→dark flash.
+                    applySatelliteTreatment(e.target, darkSatellite ? SATELLITE_DARK_TREATMENT : SATELLITE_LIGHT_TREATMENT);
                 } : undefined}
                 ref={setMapRef}
                 interactiveLayerIds={interactiveLayerIds}
