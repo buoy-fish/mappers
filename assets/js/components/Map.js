@@ -6,7 +6,8 @@ import { useState, useRef, useCallback } from 'react';
 // complexity. Source / Layer / GeolocateControl / NavigationControl are shape-
 // identical between the two submodules — they're generic wrappers around the
 // same Style Spec — so we import them from /maplibre by convention.
-import { Map as MapboxMap } from 'react-map-gl/mapbox';
+// react-map-gl 7.1 layout: default export is Mapbox-bound, `/maplibre` is MapLibre-bound.
+import { Map as MapboxMap } from 'react-map-gl';
 import { Map as MaplibreMap, Source, Layer, GeolocateControl, NavigationControl } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import 'mapbox-gl/dist/mapbox-gl.css';
