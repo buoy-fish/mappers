@@ -5,7 +5,6 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import InfoPane from "../components/InfoPane"
 import WelcomeModal from "../components/WelcomeModal"
 import { uplinkTileServerLayer, uplinkHotspotsLineLayer, uplinkRelayLineLayer, uplinkHotspotsCircleLayer, uplinkHotspotsHexLayer, uplinkChannelLayer, gatewayMarkerLayer, gatewayLabelLayer, selectedHexLayer } from './Layers.js';
-import bbox from '@turf/bbox';
 import { get } from '../data/Rest'
 import { geoToH3, h3ToGeo, h3ToGeoBoundary } from "h3-js";
 import socket from "../socket";
@@ -396,12 +395,13 @@ function Map(props) {
                         { selected: false }
                     );
 
-                    // fly to the clicked feature using native map.fitBounds
-                    const [minLng, minLat, maxLng, maxLat] = bbox(feature);
-                    map.fitBounds(
-                        [[minLng, minLat], [maxLng, maxLat]],
-                        { padding: 40, duration: 700 }
-                    );
+                    // Don't fly/zoom on click. The previous `map.fitBounds([bbox of
+                    // single H3 res9 cell])` zoomed to ~level 18 (a single 150 m
+                    // hex filling the screen), which felt broken. Hexes from the
+                    // initial /api/v1/hexes load (handled by the public.h3_res9
+                    // branch above) never zoomed; matching that behavior makes
+                    // click feedback consistent regardless of when the hex first
+                    // appeared on the map.
 
                     setTimeout(() => { setShowHexPaneCloseButton(true); }, 1000)
                 }
