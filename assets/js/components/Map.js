@@ -157,6 +157,7 @@ function Map(props) {
     const [showHexPaneCloseButton, setShowHexPaneCloseButton] = useState(false);
     const [hexGeoJson, setHexGeoJson] = useState(emptyFC);
     const [gatewayGeoJson, setGatewayGeoJson] = useState(emptyFC);
+    const [gatewayNames, setGatewayNames] = useState({});
     const [showGateways, setShowGateways] = useState(false);
     const [hideCoverage, setHideCoverage] = useState(false);
     // Dark/light satellite toggle. Default true (dark) so first-time visitors
@@ -212,6 +213,14 @@ function Map(props) {
                     }
                 }));
                 setGatewayGeoJson({ type: "FeatureCollection", features });
+
+                const names = {};
+                (data.gateways || []).forEach(gw => {
+                    if (gw.gateway_eui && gw.hotspot_name) {
+                        names[gw.gateway_eui] = gw.hotspot_name;
+                    }
+                });
+                setGatewayNames(names);
             })
             .catch(err => console.error('Failed to load gateway data:', err));
     }, []);
@@ -608,7 +617,7 @@ function Map(props) {
                 }
 
             </MapGL>
-            <InfoPane hexId={hexId} bestRssi={bestRssi} snr={snr} uplinks={uplinks} showHexPane={showHexPane} onCloseHexPaneClick={onCloseHexPaneClick} showHexPaneCloseButton={showHexPaneCloseButton} showGateways={showGateways} onToggleGateways={() => setShowGateways(!showGateways)} hideCoverage={hideCoverage} onToggleCoverage={() => setHideCoverage(!hideCoverage)} onFlyToProject={onFlyToProject} darkSatellite={darkSatellite} onToggleDarkSatellite={USE_MAPBOX ? () => setDarkSatellite(!darkSatellite) : null} />
+            <InfoPane hexId={hexId} bestRssi={bestRssi} snr={snr} uplinks={uplinks} gatewayNames={gatewayNames} showHexPane={showHexPane} onCloseHexPaneClick={onCloseHexPaneClick} showHexPaneCloseButton={showHexPaneCloseButton} showGateways={showGateways} onToggleGateways={() => setShowGateways(!showGateways)} hideCoverage={hideCoverage} onToggleCoverage={() => setHideCoverage(!hideCoverage)} onFlyToProject={onFlyToProject} darkSatellite={darkSatellite} onToggleDarkSatellite={USE_MAPBOX ? () => setDarkSatellite(!darkSatellite) : null} />
             <WelcomeModal showWelcomeModal={showWelcomeModal} onCloseWelcomeModalClick={onCloseWelcomeModalClick} />
         </div>
     );

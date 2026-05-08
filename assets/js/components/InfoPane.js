@@ -91,9 +91,26 @@ function InfoPane(props) {
         }
     }
 
+    function gatewayDisplayName(uplink) {
+        // Prefer the operator's internal name from app.buoy.fish (e.g. "El Tavo Mtn").
+        const internal = props.gatewayNames && props.gatewayNames[uplink.gateway_eui];
+        if (internal) return internal;
+        // Fall back to the Helium-assigned animal name stored at ingest time.
+        if (uplink.hotspot_name && uplink.hotspot_name !== "unknown") {
+            return deKebab(uplink.hotspot_name);
+        }
+        // Last resort: short EUI tail — more identifiable than "Unknown".
+        return uplink.gateway_eui ? uplink.gateway_eui.slice(-6).toUpperCase() : "Unknown";
+    }
+
     function findGatewayName(uplinks, gatewayEui) {
+        const internal = props.gatewayNames && props.gatewayNames[gatewayEui];
+        if (internal) return internal;
         const match = uplinks.find(u => u.gateway_eui === gatewayEui);
-        return match ? deKebab(match.hotspot_name) : gatewayEui;
+        if (match && match.hotspot_name && match.hotspot_name !== "unknown") {
+            return deKebab(match.hotspot_name);
+        }
+        return gatewayEui ? gatewayEui.slice(-6).toUpperCase() : "Unknown";
     }
 
     function deKebab(string){
@@ -294,9 +311,10 @@ function InfoPane(props) {
                                     const relayName = uplink.relay_gateway_eui
                                         ? findGatewayName(props.uplinks, uplink.relay_gateway_eui)
                                         : null;
+                                    const gwName = gatewayDisplayName(uplink);
                                     const linkLabel = relayName
-                                        ? relayName + " \u2192 " + deKebab(uplink.hotspot_name)
-                                        : "Device \u2192 " + deKebab(uplink.hotspot_name);
+                                        ? relayName + " \u2192 " + gwName
+                                        : "Device \u2192 " + gwName;
                                     return (
                                         <tr key={uplink.uplink_heard_id}>
                                             <td className="table-left animal-cell">{linkLabel}</td>
