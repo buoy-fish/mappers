@@ -91,24 +91,53 @@ function InfoPane(props) {
         }
     }
 
+    // Position-based fallback: the EUI stored on uplinks_heard (e.g. the
+    // packet-forwarder ID injected by HPR) often differs from the hardware
+    // EUI registered in app.buoy.fish gateway inventory. Match by location
+    // when EUIs disagree — gateways co-located within ~100m are the same
+    // physical site (well under H3 res9's ~174m hex edge).
+    function nameByPosition(lat, lng) {
+        if (typeof lat !== 'number' || typeof lng !== 'number') return null;
+        const dir = props.gatewayDirectory || [];
+        // ~100m at 27°N: 0.001° lat ≈ 111m, 0.001° lng ≈ 99m. Pre-filter by
+        // bounding box, then pick the closest by squared distance.
+        let best = null;
+        let bestD2 = Infinity;
+        for (const gw of dir) {
+            const dLat = gw.lat - lat;
+            const dLng = gw.lng - lng;
+            if (Math.abs(dLat) > 0.001 || Math.abs(dLng) > 0.001) continue;
+            const d2 = dLat * dLat + dLng * dLng;
+            if (d2 < bestD2) { bestD2 = d2; best = gw; }
+        }
+        return best ? best.name : null;
+    }
+
     function gatewayDisplayName(uplink) {
-        // Prefer the operator's internal name from app.buoy.fish (e.g. "El Tavo Mtn").
-        const internal = props.gatewayNames && props.gatewayNames[uplink.gateway_eui];
-        if (internal) return internal;
-        // Fall back to the Helium-assigned animal name stored at ingest time.
+        // 1. Operator's internal name from app.buoy.fish, by hardware EUI.
+        const byEui = props.gatewayNames && props.gatewayNames[uplink.gateway_eui];
+        if (byEui) return byEui;
+        // 2. Same inventory, joined by gateway location (handles EUI mismatch).
+        const byPos = nameByPosition(uplink.lat, uplink.lng);
+        if (byPos) return byPos;
+        // 3. Helium-assigned kebab animal name stored at ingest time.
         if (uplink.hotspot_name && uplink.hotspot_name !== "unknown") {
             return deKebab(uplink.hotspot_name);
         }
-        // Last resort: short EUI tail — more identifiable than "Unknown".
+        // 4. Last resort: short EUI tail.
         return uplink.gateway_eui ? uplink.gateway_eui.slice(-6).toUpperCase() : "Unknown";
     }
 
     function findGatewayName(uplinks, gatewayEui) {
-        const internal = props.gatewayNames && props.gatewayNames[gatewayEui];
-        if (internal) return internal;
+        const byEui = props.gatewayNames && props.gatewayNames[gatewayEui];
+        if (byEui) return byEui;
         const match = uplinks.find(u => u.gateway_eui === gatewayEui);
-        if (match && match.hotspot_name && match.hotspot_name !== "unknown") {
-            return deKebab(match.hotspot_name);
+        if (match) {
+            const byPos = nameByPosition(match.lat, match.lng);
+            if (byPos) return byPos;
+            if (match.hotspot_name && match.hotspot_name !== "unknown") {
+                return deKebab(match.hotspot_name);
+            }
         }
         return gatewayEui ? gatewayEui.slice(-6).toUpperCase() : "Unknown";
     }
