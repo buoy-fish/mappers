@@ -11,6 +11,7 @@ defmodule Mappers.Uplinks do
       |> Map.put(:app_eui, message["app_eui"])
       |> Map.put(:dev_eui, message["dev_eui"])
       |> Map.put(:device_id, message["id"])
+      |> Map.put(:device_type, message["device_type"])
       |> Map.put(:fcnt, message["fcnt"])
       |> Map.put(:first_timestamp, round(message["reported_at"] / 1000) |> DateTime.from_unix!())
       |> Map.put(:frequency, Enum.at(message["hotspots"], 0)["frequency"])
@@ -50,6 +51,7 @@ defmodule Mappers.Uplinks do
           hotspot_name: uh.hotspot_name,
           gateway_id: uh.gateway_id,
           relay_gateway_id: uh.relay_gateway_id,
+          device_type: u.device_type,
           rssi: uh.rssi,
           snr: uh.snr,
           lat: uh.latitude,

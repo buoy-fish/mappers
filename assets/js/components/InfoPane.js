@@ -136,6 +136,18 @@ function InfoPane(props) {
         .join(' ');
     }
 
+    // Render the operator's classification of the device (e.g. "buoy",
+    // "mapping_device") as a human label for the link's "from" side.
+    // Falls back to "Device" when the upstream forwarder didn't tag the
+    // uplink (historical rows, ChirpStack payloads bypassing the forwarder).
+    function formatDeviceType(type) {
+        if (!type) return "Device";
+        return type.split(/[-_]/)
+            .filter(w => w.length > 0)
+            .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+            .join(' ');
+    }
+
     return (
         <div className="info-pane">
             <div className={classNames("pane-nav", {
@@ -328,9 +340,10 @@ function InfoPane(props) {
                                         ? findGatewayName(props.uplinks, uplink.relay_gateway_id)
                                         : null;
                                     const gwName = gatewayDisplayName(uplink);
+                                    const deviceLabel = formatDeviceType(uplink.device_type);
                                     const linkLabel = relayName
                                         ? relayName + " \u2192 " + gwName
-                                        : "Device \u2192 " + gwName;
+                                        : deviceLabel + " \u2192 " + gwName;
                                     const subLine = gatewaySubLine(uplink);
                                     return (
                                         <tr key={uplink.uplink_heard_id}>

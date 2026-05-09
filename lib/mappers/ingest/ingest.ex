@@ -116,6 +116,11 @@ defmodule Mappers.Ingest do
       "app_eui" => "0000000000000000",
       "dev_eui" => get_in(message, ["deviceInfo", "devEui"]),
       "id" => message["deduplicationId"],
+      # Operator's classification of the device (e.g. "buoy", "vessel",
+      # "mapping_device"). Injected by the upstream forwarder on
+      # app.buoy.fish from its own device inventory; nil for ChirpStack
+      # payloads that bypass the forwarder.
+      "device_type" => message["device_type"],
       "fcnt" => message["fCnt"],
       "reported_at" => parse_reported_at(top_time),
       "frequency" => tx_frequency,
@@ -141,6 +146,7 @@ defmodule Mappers.Ingest do
       "app_eui" => message["app_eui"],
       "dev_eui" => message["dev_eui"],
       "id" => message["id"],
+      "device_type" => message["device_type"],
       "fcnt" => message["fcnt"],
       "reported_at" => message["reported_at"],
       "frequency" => Enum.at(message["hotspots"], 0)["frequency"],

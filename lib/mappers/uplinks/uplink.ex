@@ -6,6 +6,7 @@ defmodule Mappers.Uplinks.Uplink do
     :app_eui,
     :dev_eui,
     :device_id,
+    :device_type,
     :fcnt,
     :first_timestamp,
     :frequency,
@@ -20,6 +21,7 @@ defmodule Mappers.Uplinks.Uplink do
     field :app_eui, :string
     field :dev_eui, :string
     field :device_id, :string
+    field :device_type, :string
     field :fcnt, :integer
     field :first_timestamp, :utc_datetime_usec
     field :frequency, :float
@@ -31,7 +33,7 @@ defmodule Mappers.Uplinks.Uplink do
   @doc false
   def changeset(uplink, attrs) do
     uplink
-    |> cast(attrs, [:dev_eui, :app_eui, :device_id, :fcnt, :frequency, :spreading_factor, :altitude, :gps_accuracy, :first_timestamp])
+    |> cast(attrs, [:dev_eui, :app_eui, :device_id, :device_type, :fcnt, :frequency, :spreading_factor, :altitude, :gps_accuracy, :first_timestamp])
     |> validate_required([:dev_eui, :app_eui, :device_id, :fcnt, :frequency, :spreading_factor, :altitude, :gps_accuracy, :first_timestamp])
   end
 end
