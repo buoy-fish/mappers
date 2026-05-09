@@ -5,8 +5,8 @@ defmodule Mappers.UplinksHeards.UplinkHeard do
   @fields [
     :hotspot_address,
     :hotspot_name,
-    :gateway_eui,
-    :relay_gateway_eui,
+    :gateway_id,
+    :relay_gateway_id,
     :latitude,
     :longitude,
     :rssi,
@@ -19,8 +19,8 @@ defmodule Mappers.UplinksHeards.UplinkHeard do
   schema "uplinks_heard" do
     field :hotspot_address, :string
     field :hotspot_name, :string
-    field :gateway_eui, :string
-    field :relay_gateway_eui, :string
+    field :gateway_id, :string
+    field :relay_gateway_id, :string
     field :latitude, :float
     field :longitude, :float
     field :rssi, :float
@@ -32,7 +32,7 @@ defmodule Mappers.UplinksHeards.UplinkHeard do
   @doc false
   def changeset(uplink_heard, attrs) do
     uplink_heard
-    |> cast(attrs, [:hotspot_address, :hotspot_name, :gateway_eui, :relay_gateway_eui, :latitude, :longitude, :rssi, :snr, :timestamp, :uplink_id])
+    |> cast(attrs, [:hotspot_address, :hotspot_name, :gateway_id, :relay_gateway_id, :latitude, :longitude, :rssi, :snr, :timestamp, :uplink_id])
     |> validate_required([:hotspot_address, :hotspot_name, :latitude, :longitude, :rssi, :snr, :timestamp, :uplink_id])
   end
 end

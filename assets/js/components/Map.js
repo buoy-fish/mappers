@@ -219,7 +219,7 @@ function Map(props) {
                 // (slot) GWID. The packet forwarder always emits a slot GWID
                 // in rxInfo.gatewayId, never the hardware EUI, so the
                 // concentrator IDs are what actually land in
-                // uplinks_heard.gateway_eui at ingest time. Indexing the full
+                // uplinks_heard.gateway_id at ingest time. Indexing the full
                 // record (not just the name) lets the InfoPane show both the
                 // hardware EUI and the concentrator that heard each hop.
                 const records = {};
@@ -367,16 +367,16 @@ function Map(props) {
                 // Build a lookup of gateway positions from the uplinks data
                 const gwPositions = {};
                 uplinks.uplinks.forEach(h => {
-                    if (h.gateway_eui) {
-                        gwPositions[h.gateway_eui] = { lat: h.lat, lng: h.lng };
+                    if (h.gateway_id) {
+                        gwPositions[h.gateway_id] = { lat: h.lat, lng: h.lng };
                     }
                 });
-                // Track which gateway_euis are part of a mesh path
-                const meshGwEuis = new Set();
+                // Track which gateway IDs are part of a mesh path
+                const meshGwIds = new Set();
                 uplinks.uplinks.forEach(h => {
-                    if (h.relay_gateway_eui) {
-                        meshGwEuis.add(h.relay_gateway_eui);
-                        meshGwEuis.add(h.gateway_eui);
+                    if (h.relay_gateway_id) {
+                        meshGwIds.add(h.relay_gateway_id);
+                        meshGwIds.add(h.gateway_id);
                     }
                 });
 
@@ -384,11 +384,11 @@ function Map(props) {
                     const hotspot_h3_index = geoToH3(h.lat, h.lng, 8)
                     const hotspot_coords = h3ToGeo(hotspot_h3_index)
                     const hotspot_polygon_coords = h3ToGeoBoundary(hotspot_h3_index, true)
-                    const isMesh = meshGwEuis.has(h.gateway_eui);
+                    const isMesh = meshGwIds.has(h.gateway_id);
 
-                    if (h.relay_gateway_eui && gwPositions[h.relay_gateway_eui]) {
+                    if (h.relay_gateway_id && gwPositions[h.relay_gateway_id]) {
                         // Relay leg: draw line from mesh GW to this border GW
-                        const relayPos = gwPositions[h.relay_gateway_eui];
+                        const relayPos = gwPositions[h.relay_gateway_id];
                         const relay_h3 = geoToH3(relayPos.lat, relayPos.lng, 8);
                         const relay_coords = h3ToGeo(relay_h3);
                         hotspot_line_features.push({

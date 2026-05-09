@@ -53,7 +53,7 @@ defmodule MappersWeb.Router do
   scope "/api/v1/admin", MappersWeb do
     pipe_through :admin_api
 
-    delete "/gateways/:gateway_eui/coverage",
+    delete "/gateways/:gateway_id/coverage",
            API.V1.Admin.GatewayCoverageController,
            :delete
   end

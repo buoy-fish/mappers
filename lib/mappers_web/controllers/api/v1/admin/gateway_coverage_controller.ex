@@ -9,13 +9,13 @@ defmodule MappersWeb.API.V1.Admin.GatewayCoverageController do
 
   alias Mappers.UplinksHeard
 
-  def delete(conn, %{"gateway_eui" => gateway_eui}) do
-    {:ok, count} = UplinksHeard.delete_by_gateway(gateway_eui)
-    Logger.info("Purged #{count} uplinks_heard rows for gateway_eui=#{gateway_eui}")
-    json(conn, %{ok: true, gateway_eui: gateway_eui, deleted_count: count})
+  def delete(conn, %{"gateway_id" => gateway_id}) do
+    {:ok, count} = UplinksHeard.delete_by_gateway(gateway_id)
+    Logger.info("Purged #{count} uplinks_heard rows for gateway_id=#{gateway_id}")
+    json(conn, %{ok: true, gateway_id: gateway_id, deleted_count: count})
   rescue
     e ->
-      Logger.error("Purge failed for gateway_eui=#{gateway_eui}: #{Exception.message(e)}")
+      Logger.error("Purge failed for gateway_id=#{Map.get(conn.params, "gateway_id")}: #{Exception.message(e)}")
 
       conn
       |> put_status(:internal_server_error)

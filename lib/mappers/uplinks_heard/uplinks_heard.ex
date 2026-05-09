@@ -5,12 +5,14 @@ defmodule Mappers.UplinksHeard do
   alias Mappers.UplinksHeards.UplinkHeard
 
   @doc """
-  Delete all `uplinks_heard` rows for a given gateway EUI. Returns the number
-  of rows deleted. Used by admin coverage-purge endpoint.
+  Delete all `uplinks_heard` rows for a given gateway stream ID (the
+  `rxInfo.gatewayId` value — concentrator GWID for our forwarders, the
+  HPR-derived ID for Helium gateways). Returns the number of rows
+  deleted. Used by admin coverage-purge endpoint.
   """
-  def delete_by_gateway(gateway_eui) when is_binary(gateway_eui) do
+  def delete_by_gateway(gateway_id) when is_binary(gateway_id) do
     {count, _} =
-      from(u in UplinkHeard, where: u.gateway_eui == ^gateway_eui)
+      from(u in UplinkHeard, where: u.gateway_id == ^gateway_id)
       |> Repo.delete_all()
 
     {:ok, count}
@@ -22,8 +24,8 @@ defmodule Mappers.UplinksHeard do
         %{}
         |> Map.put(:hotspot_address, hotspot["id"])
         |> Map.put(:hotspot_name, hotspot["name"])
-        |> Map.put(:gateway_eui, hotspot["gateway_eui"])
-        |> Map.put(:relay_gateway_eui, hotspot["relay_gateway_eui"])
+        |> Map.put(:gateway_id, hotspot["gateway_id"])
+        |> Map.put(:relay_gateway_id, hotspot["relay_gateway_id"])
         |> Map.put(:latitude, hotspot["lat"])
         |> Map.put(:longitude, hotspot["long"])
         |> Map.put(:rssi, hotspot["rssi"])

@@ -81,12 +81,16 @@ defmodule MappersWeb.API.V1.GatewayController do
   end
 
   defp fetch_from_uplinks_heard do
+    # Degraded-mode fallback when app.buoy.fish is unreachable. The output
+    # `gateway_eui` key is preserved for shape compatibility with the
+    # primary inventory path, even though the value here is actually a
+    # stream ID (rxInfo.gatewayId), not a hardware EUI.
     from(uh in UplinkHeard,
-      where: not is_nil(uh.gateway_eui) and uh.gateway_eui != "",
-      distinct: uh.gateway_eui,
-      order_by: [asc: uh.gateway_eui, desc: uh.timestamp],
+      where: not is_nil(uh.gateway_id) and uh.gateway_id != "",
+      distinct: uh.gateway_id,
+      order_by: [asc: uh.gateway_id, desc: uh.timestamp],
       select: %{
-        gateway_eui: uh.gateway_eui,
+        gateway_eui: uh.gateway_id,
         hotspot_name: uh.hotspot_name,
         lat: uh.latitude,
         lng: uh.longitude,

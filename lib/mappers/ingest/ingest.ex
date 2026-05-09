@@ -187,15 +187,18 @@ defmodule Mappers.Ingest do
 
       %{
         # Prefer Helium pubkey (HPR injects it at metadata.gateway_id), fall
-        # back to outer gatewayId (the slot1 MAC for local-bridge payloads,
-        # the HPR-derived 8-byte ID for HPR payloads — either is unique per
-        # gateway and satisfies the UplinkHeard schema's required field).
-        # Without this fallback, local-bridge payloads have nil id, the
-        # required-field validation fails, and we lose the "heard" record.
+        # back to outer gatewayId (the slot1 concentrator GWID for our
+        # forwarders, the HPR-derived 8-byte ID for HPR payloads — either is
+        # unique per gateway and satisfies the UplinkHeard schema's required
+        # field). Without this fallback, local-bridge payloads have nil id,
+        # the required-field validation fails, and we lose the "heard"
+        # record. Note: this is a stream identifier from rxInfo.gatewayId,
+        # never the hardware EUI — that lives only in the app.buoy.fish
+        # gateway inventory.
         "id" => get_in(info, ["metadata", "gateway_id"]) || info["gatewayId"],
         "name" => get_in(info, ["metadata", "gateway_name"]) || "unknown",
-        "gateway_eui" => info["gatewayId"],
-        "relay_gateway_eui" => info["relay_gateway_eui"],
+        "gateway_id" => info["gatewayId"],
+        "relay_gateway_id" => info["relay_gateway_eui"] || info["relay_gateway_id"],
         "lat" => to_float(get_in(info, ["metadata", "gateway_lat"])),
         "long" => to_float(get_in(info, ["metadata", "gateway_long"])),
         "rssi" => info["rssi"],

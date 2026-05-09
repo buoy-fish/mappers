@@ -99,30 +99,30 @@ function InfoPane(props) {
     }
 
     function gatewayDisplayName(uplink) {
-        const rec = gatewayRecord(uplink.gateway_eui);
+        const rec = gatewayRecord(uplink.gateway_id);
         if (rec) return rec.name;
         if (uplink.hotspot_name && uplink.hotspot_name !== "unknown") {
             return deKebab(uplink.hotspot_name);
         }
-        return uplink.gateway_eui ? uplink.gateway_eui.slice(-6).toUpperCase() : "Unknown";
+        return uplink.gateway_id ? uplink.gateway_id.slice(-6).toUpperCase() : "Unknown";
     }
 
-    function findGatewayName(uplinks, gatewayEui) {
-        const rec = gatewayRecord(gatewayEui);
+    function findGatewayName(uplinks, gatewayId) {
+        const rec = gatewayRecord(gatewayId);
         if (rec) return rec.name;
-        const match = uplinks.find(u => u.gateway_eui === gatewayEui);
+        const match = uplinks.find(u => u.gateway_id === gatewayId);
         if (match && match.hotspot_name && match.hotspot_name !== "unknown") {
             return deKebab(match.hotspot_name);
         }
-        return gatewayEui ? gatewayEui.slice(-6).toUpperCase() : "Unknown";
+        return gatewayId ? gatewayId.slice(-6).toUpperCase() : "Unknown";
     }
 
-    // Sub-line rendered under each link row: hardware EUI when known, and
-    // the slot GWID that heard this specific hop. Falls back to the bare
-    // stream ID when the gateway isn't in inventory.
+    // Sub-line rendered under each link row: hardware EUI (from inventory)
+    // and the slot GWID that heard this specific hop. Falls back to the
+    // bare stream ID when the gateway isn't in inventory.
     function gatewaySubLine(uplink) {
-        const rec = gatewayRecord(uplink.gateway_eui);
-        const slot = uplink.gateway_eui;
+        const rec = gatewayRecord(uplink.gateway_id);
+        const slot = uplink.gateway_id;
         if (rec && rec.gateway_eui && rec.gateway_eui !== slot) {
             return rec.gateway_eui + " · " + slot;
         }
@@ -324,8 +324,8 @@ function InfoPane(props) {
                             </thead>
                             <tbody>
                                 {props.uplinks && props.uplinks.map(uplink => {
-                                    const relayName = uplink.relay_gateway_eui
-                                        ? findGatewayName(props.uplinks, uplink.relay_gateway_eui)
+                                    const relayName = uplink.relay_gateway_id
+                                        ? findGatewayName(props.uplinks, uplink.relay_gateway_id)
                                         : null;
                                     const gwName = gatewayDisplayName(uplink);
                                     const linkLabel = relayName
