@@ -157,7 +157,7 @@ function Map(props) {
     const [showHexPaneCloseButton, setShowHexPaneCloseButton] = useState(false);
     const [hexGeoJson, setHexGeoJson] = useState(emptyFC);
     const [gatewayGeoJson, setGatewayGeoJson] = useState(emptyFC);
-    const [gatewayNames, setGatewayNames] = useState({});
+    const [gatewayRecords, setGatewayRecords] = useState({});
     const [showGateways, setShowGateways] = useState(false);
     const [hideCoverage, setHideCoverage] = useState(false);
     // Dark/light satellite toggle. Default true (dark) so first-time visitors
@@ -214,21 +214,28 @@ function Map(props) {
                 }));
                 setGatewayGeoJson({ type: "FeatureCollection", features });
 
-                // Index the operator's name under every identifier the
+                // Index the inventory record under every identifier the
                 // gateway can be heard by: hardware EUI plus each concentrator
                 // (slot) GWID. The packet forwarder always emits a slot GWID
                 // in rxInfo.gatewayId, never the hardware EUI, so the
                 // concentrator IDs are what actually land in
-                // uplinks_heard.gateway_eui at ingest time.
-                const names = {};
+                // uplinks_heard.gateway_eui at ingest time. Indexing the full
+                // record (not just the name) lets the InfoPane show both the
+                // hardware EUI and the concentrator that heard each hop.
+                const records = {};
                 (data.gateways || []).forEach(gw => {
                     if (!gw.hotspot_name) return;
-                    if (gw.gateway_eui) names[gw.gateway_eui] = gw.hotspot_name;
+                    const record = {
+                        name: gw.hotspot_name,
+                        gateway_eui: gw.gateway_eui,
+                        concentrator_ids: gw.concentrator_ids || [],
+                    };
+                    if (gw.gateway_eui) records[gw.gateway_eui] = record;
                     (gw.concentrator_ids || []).forEach(cid => {
-                        if (cid) names[cid] = gw.hotspot_name;
+                        if (cid) records[cid] = record;
                     });
                 });
-                setGatewayNames(names);
+                setGatewayRecords(records);
             })
             .catch(err => console.error('Failed to load gateway data:', err));
     }, []);
@@ -625,7 +632,7 @@ function Map(props) {
                 }
 
             </MapGL>
-            <InfoPane hexId={hexId} bestRssi={bestRssi} snr={snr} uplinks={uplinks} gatewayNames={gatewayNames} showHexPane={showHexPane} onCloseHexPaneClick={onCloseHexPaneClick} showHexPaneCloseButton={showHexPaneCloseButton} showGateways={showGateways} onToggleGateways={() => setShowGateways(!showGateways)} hideCoverage={hideCoverage} onToggleCoverage={() => setHideCoverage(!hideCoverage)} onFlyToProject={onFlyToProject} darkSatellite={darkSatellite} onToggleDarkSatellite={USE_MAPBOX ? () => setDarkSatellite(!darkSatellite) : null} />
+            <InfoPane hexId={hexId} bestRssi={bestRssi} snr={snr} uplinks={uplinks} gatewayRecords={gatewayRecords} showHexPane={showHexPane} onCloseHexPaneClick={onCloseHexPaneClick} showHexPaneCloseButton={showHexPaneCloseButton} showGateways={showGateways} onToggleGateways={() => setShowGateways(!showGateways)} hideCoverage={hideCoverage} onToggleCoverage={() => setHideCoverage(!hideCoverage)} onFlyToProject={onFlyToProject} darkSatellite={darkSatellite} onToggleDarkSatellite={USE_MAPBOX ? () => setDarkSatellite(!darkSatellite) : null} />
             <WelcomeModal showWelcomeModal={showWelcomeModal} onCloseWelcomeModalClick={onCloseWelcomeModalClick} />
         </div>
     );

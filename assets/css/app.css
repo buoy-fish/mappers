@@ -344,6 +344,17 @@ body {
   text-overflow: ellipsis;
   max-width: calc(100vw - 14rem); /*hacking in some text overflow*/
 }
+.animal-cell > div {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gateway-id-sub {
+  font-size: 0.75em;
+  opacity: 0.55;
+  margin-top: 1px;
+  letter-spacing: 0;
+}
 .table-left {
   text-align: left;
 }

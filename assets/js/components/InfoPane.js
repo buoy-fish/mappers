@@ -94,26 +94,39 @@ function InfoPane(props) {
     // Inventory keys every operator-named gateway under both its hardware
     // EUI and each of its concentrator (slot) GWIDs, so a single ID lookup
     // covers whatever stream ID arrived in rxInfo.gatewayId at ingest time.
+    function gatewayRecord(streamId) {
+        return (props.gatewayRecords && props.gatewayRecords[streamId]) || null;
+    }
+
     function gatewayDisplayName(uplink) {
-        const byId = props.gatewayNames && props.gatewayNames[uplink.gateway_eui];
-        if (byId) return byId;
-        // Helium-assigned kebab animal name stored at ingest time.
+        const rec = gatewayRecord(uplink.gateway_eui);
+        if (rec) return rec.name;
         if (uplink.hotspot_name && uplink.hotspot_name !== "unknown") {
             return deKebab(uplink.hotspot_name);
         }
-        // Last resort: short EUI tail. If you see this in the UI, the
-        // gateway is missing from app.buoy.fish inventory — add it there.
         return uplink.gateway_eui ? uplink.gateway_eui.slice(-6).toUpperCase() : "Unknown";
     }
 
     function findGatewayName(uplinks, gatewayEui) {
-        const byId = props.gatewayNames && props.gatewayNames[gatewayEui];
-        if (byId) return byId;
+        const rec = gatewayRecord(gatewayEui);
+        if (rec) return rec.name;
         const match = uplinks.find(u => u.gateway_eui === gatewayEui);
         if (match && match.hotspot_name && match.hotspot_name !== "unknown") {
             return deKebab(match.hotspot_name);
         }
         return gatewayEui ? gatewayEui.slice(-6).toUpperCase() : "Unknown";
+    }
+
+    // Sub-line rendered under each link row: hardware EUI when known, and
+    // the slot GWID that heard this specific hop. Falls back to the bare
+    // stream ID when the gateway isn't in inventory.
+    function gatewaySubLine(uplink) {
+        const rec = gatewayRecord(uplink.gateway_eui);
+        const slot = uplink.gateway_eui;
+        if (rec && rec.gateway_eui && rec.gateway_eui !== slot) {
+            return rec.gateway_eui + " · " + slot;
+        }
+        return slot || null;
     }
 
     function deKebab(string){
@@ -318,9 +331,13 @@ function InfoPane(props) {
                                     const linkLabel = relayName
                                         ? relayName + " \u2192 " + gwName
                                         : "Device \u2192 " + gwName;
+                                    const subLine = gatewaySubLine(uplink);
                                     return (
                                         <tr key={uplink.uplink_heard_id}>
-                                            <td className="table-left animal-cell">{linkLabel}</td>
+                                            <td className="table-left animal-cell">
+                                                <div>{linkLabel}</div>
+                                                {subLine && <div className="gateway-id-sub util-liga-mono">{subLine}</div>}
+                                            </td>
                                             <td className="table-right util-liga-mono tighten table-numeric">{uplink.rssi}<span className="table-unit"> dBm</span></td>
                                             <td className="table-right util-liga-mono tighten table-numeric">{uplink.snr.toFixed(2)}</td>
                                             <td className="table-right util-liga-mono tighten table-numeric">{uplinkDistance(uplink.lat, uplink.lng).number}<span className="table-unit"> {uplinkDistance(uplink.lat, uplink.lng).unit}</span></td>
