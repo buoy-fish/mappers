@@ -158,7 +158,6 @@ function Map(props) {
     const [hexGeoJson, setHexGeoJson] = useState(emptyFC);
     const [gatewayGeoJson, setGatewayGeoJson] = useState(emptyFC);
     const [gatewayNames, setGatewayNames] = useState({});
-    const [gatewayDirectory, setGatewayDirectory] = useState([]);
     const [showGateways, setShowGateways] = useState(false);
     const [hideCoverage, setHideCoverage] = useState(false);
     // Dark/light satellite toggle. Default true (dark) so first-time visitors
@@ -215,17 +214,21 @@ function Map(props) {
                 }));
                 setGatewayGeoJson({ type: "FeatureCollection", features });
 
+                // Index the operator's name under every identifier the
+                // gateway can be heard by: hardware EUI plus each concentrator
+                // (slot) GWID. The packet forwarder always emits a slot GWID
+                // in rxInfo.gatewayId, never the hardware EUI, so the
+                // concentrator IDs are what actually land in
+                // uplinks_heard.gateway_eui at ingest time.
                 const names = {};
-                const directory = [];
                 (data.gateways || []).forEach(gw => {
                     if (!gw.hotspot_name) return;
                     if (gw.gateway_eui) names[gw.gateway_eui] = gw.hotspot_name;
-                    if (typeof gw.lat === 'number' && typeof gw.lng === 'number') {
-                        directory.push({ name: gw.hotspot_name, lat: gw.lat, lng: gw.lng });
-                    }
+                    (gw.concentrator_ids || []).forEach(cid => {
+                        if (cid) names[cid] = gw.hotspot_name;
+                    });
                 });
                 setGatewayNames(names);
-                setGatewayDirectory(directory);
             })
             .catch(err => console.error('Failed to load gateway data:', err));
     }, []);
@@ -622,7 +625,7 @@ function Map(props) {
                 }
 
             </MapGL>
-            <InfoPane hexId={hexId} bestRssi={bestRssi} snr={snr} uplinks={uplinks} gatewayNames={gatewayNames} gatewayDirectory={gatewayDirectory} showHexPane={showHexPane} onCloseHexPaneClick={onCloseHexPaneClick} showHexPaneCloseButton={showHexPaneCloseButton} showGateways={showGateways} onToggleGateways={() => setShowGateways(!showGateways)} hideCoverage={hideCoverage} onToggleCoverage={() => setHideCoverage(!hideCoverage)} onFlyToProject={onFlyToProject} darkSatellite={darkSatellite} onToggleDarkSatellite={USE_MAPBOX ? () => setDarkSatellite(!darkSatellite) : null} />
+            <InfoPane hexId={hexId} bestRssi={bestRssi} snr={snr} uplinks={uplinks} gatewayNames={gatewayNames} showHexPane={showHexPane} onCloseHexPaneClick={onCloseHexPaneClick} showHexPaneCloseButton={showHexPaneCloseButton} showGateways={showGateways} onToggleGateways={() => setShowGateways(!showGateways)} hideCoverage={hideCoverage} onToggleCoverage={() => setHideCoverage(!hideCoverage)} onFlyToProject={onFlyToProject} darkSatellite={darkSatellite} onToggleDarkSatellite={USE_MAPBOX ? () => setDarkSatellite(!darkSatellite) : null} />
             <WelcomeModal showWelcomeModal={showWelcomeModal} onCloseWelcomeModalClick={onCloseWelcomeModalClick} />
         </div>
     );

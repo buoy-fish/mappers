@@ -70,6 +70,7 @@ defmodule MappersWeb.API.V1.GatewayController do
   defp map_gateway(g) do
     %{
       gateway_eui: g["gateway_eui"],
+      concentrator_ids: g["concentrator_ids"] || [],
       hotspot_name: g["name"],
       lat: g["latitude"],
       lng: g["longitude"],
