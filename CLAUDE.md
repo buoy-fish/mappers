@@ -133,6 +133,15 @@ mix ecto.setup                # Create DB + migrate + seed
 mix phx.server                # Start dev server (port from PORT env)
 ```
 
+### Running mix on prod
+Prod uses Nix flakes (the systemd unit invokes `nix develop --command mix phx.server`). For ad-hoc tasks:
+```bash
+cd ~/map.buoy.fish
+nix develop --command mix <task>
+# Fallback if nix isn't on PATH:
+/nix/var/nix/profiles/default/bin/nix develop --command mix <task>
+```
+
 Requires PostgreSQL with PostGIS running locally. DB config is in `config/dev.exs` (postgres/postgres@localhost/mappers_dev). `.env.development` is committed with sensible defaults. No API key needed — uses open-source MapLibre GL with CARTO basemap.
 
 ## Environment Variables
