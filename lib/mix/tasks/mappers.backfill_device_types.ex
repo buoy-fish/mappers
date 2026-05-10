@@ -9,6 +9,13 @@ defmodule Mix.Tasks.Mappers.BackfillDeviceTypes do
   Idempotent: only touches rows where `device_type IS NULL`, so re-running
   is a no-op for any device whose uplinks have already been tagged.
 
+  ## Auth
+
+  The endpoint is gated by the shared `X-Mappers-Admin-Token` header. The
+  token must be set in the `BUOY_MAPPERS_ADMIN_TOKEN` env var (same value
+  on both the mapper and app sides — already wired into the prod systemd
+  EnvironmentFiles for `gateway-receptions`).
+
   ## Usage
 
       mix mappers.backfill_device_types
@@ -16,9 +23,6 @@ defmodule Mix.Tasks.Mappers.BackfillDeviceTypes do
   Or with a custom app host:
 
       APP_BUOY_URL=http://localhost:4000 mix mappers.backfill_device_types
-
-  Designed to run on the prod server alongside app.buoy.fish — the source
-  endpoint is gated to localhost-only requests.
   """
 
   use Mix.Task
@@ -37,9 +41,22 @@ defmodule Mix.Tasks.Mappers.BackfillDeviceTypes do
     :ok = Application.ensure_started(:ssl)
 
     base = System.get_env("APP_BUOY_URL") || @default_app_url
+
+    token =
+      case System.get_env("BUOY_MAPPERS_ADMIN_TOKEN") do
+        nil ->
+          Mix.raise("BUOY_MAPPERS_ADMIN_TOKEN is not set. Same value as the app side; check the prod systemd EnvironmentFile.")
+
+        "" ->
+          Mix.raise("BUOY_MAPPERS_ADMIN_TOKEN is empty.")
+
+        t ->
+          t
+      end
+
     Mix.shell().info("Fetching device types from #{base}#{@endpoint_path} ...")
 
-    case fetch_device_types(base) do
+    case fetch_device_types(base, token) do
       {:ok, []} ->
         Mix.shell().info("No devices with non-null device_type returned. Nothing to backfill.")
 
@@ -52,12 +69,13 @@ defmodule Mix.Tasks.Mappers.BackfillDeviceTypes do
     end
   end
 
-  defp fetch_device_types(base) do
+  defp fetch_device_types(base, token) do
     url = String.to_charlist("#{base}#{@endpoint_path}")
+    headers = [{~c"x-mappers-admin-token", String.to_charlist(token)}]
     request_opts = [timeout: 30_000, connect_timeout: 5_000]
     http_opts = [body_format: :binary]
 
-    case :httpc.request(:get, {url, []}, request_opts, http_opts) do
+    case :httpc.request(:get, {url, headers}, request_opts, http_opts) do
       {:ok, {{_, 200, _}, _headers, body}} ->
         parse_body(body)
 
