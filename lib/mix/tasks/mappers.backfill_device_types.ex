@@ -12,9 +12,12 @@ defmodule Mix.Tasks.Mappers.BackfillDeviceTypes do
   ## Auth
 
   The endpoint is gated by the shared `X-Mappers-Admin-Token` header. The
-  token must be set in the `BUOY_MAPPERS_ADMIN_TOKEN` env var (same value
-  on both the mapper and app sides — already wired into the prod systemd
-  EnvironmentFiles for `gateway-receptions`).
+  token is read from `MAPPERS_ADMIN_TOKEN` (this side; lives in
+  `~/map.buoy.fish/.env`) — the same secret value the app side stores
+  under `BUOY_MAPPERS_ADMIN_TOKEN` in `~/app.buoy.fish/.env`. The mapper
+  systemd unit loads `~/map.buoy.fish/.env` automatically; for ad-hoc
+  use source the mapper's own `.env` — DO NOT source the app's `.env`
+  or you'll override `DATABASE_URL` and connect to the wrong database.
 
   ## Usage
 
@@ -43,12 +46,16 @@ defmodule Mix.Tasks.Mappers.BackfillDeviceTypes do
     base = System.get_env("APP_BUOY_URL") || @default_app_url
 
     token =
-      case System.get_env("BUOY_MAPPERS_ADMIN_TOKEN") do
+      case System.get_env("MAPPERS_ADMIN_TOKEN") do
         nil ->
-          Mix.raise("BUOY_MAPPERS_ADMIN_TOKEN is not set. Same value as the app side; check the prod systemd EnvironmentFile.")
+          Mix.raise(
+            "MAPPERS_ADMIN_TOKEN is not set. Source the mapper's own .env first " <>
+              "(`set -a; source ~/map.buoy.fish/.env; set +a`). Do not source the " <>
+              "app's .env — it will override DATABASE_URL."
+          )
 
         "" ->
-          Mix.raise("BUOY_MAPPERS_ADMIN_TOKEN is empty.")
+          Mix.raise("MAPPERS_ADMIN_TOKEN is empty.")
 
         t ->
           t
