@@ -3,16 +3,22 @@ import classNames from 'classnames'
 import formatDistanceToNowStrict from 'date-fns/formatDistanceToNowStrict'
 import parseISO from 'date-fns/parseISO'
 import h3 from 'h3-js/dist/h3-js';
-import { getInitialProjects, refreshProjectsInBackground } from '../utils/projects'
+import { getInitialProjects, fetchProjects } from '../utils/projects'
 
 function InfoPane(props) {
     const [showLegendPane, setShowLegendPane] = React.useState(false)
     const [showProjectsPane, setShowProjectsPane] = React.useState(false)
-    // Projects list — cached/fallback at first paint, refreshed in the
-    // background for the next page load. See utils/projects.js for the
-    // cache + TTL contract.
-    const [projects] = React.useState(getInitialProjects)
-    React.useEffect(() => { refreshProjectsInBackground() }, [])
+    // Projects list — cached/fallback at first paint, refetched on
+    // every mount and React state updates when the live list arrives.
+    // See utils/projects.js for the contract.
+    const [projects, setProjects] = React.useState(getInitialProjects)
+    React.useEffect(() => {
+        let cancelled = false
+        fetchProjects().then((live) => {
+            if (!cancelled && live) setProjects(live)
+        })
+        return () => { cancelled = true }
+    }, [])
     const onLegendClick = () => { setShowLegendPane(!showLegendPane); setShowProjectsPane(false); }
     const onProjectsClick = () => { setShowProjectsPane(!showProjectsPane); setShowLegendPane(false); }
     const locale = navigator.language;

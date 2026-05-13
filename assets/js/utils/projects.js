@@ -1,21 +1,22 @@
 /**
  * Project list fetch + cache for map.buoy.fish.
  *
- * Mirrors the `mapConfig.js` pattern exactly:
+ * Strategy: fetch-first, cache-as-fallback.
  *
  *   1. `getInitialProjects()` is synchronous: cached value if any, else
  *      the hardcoded FALLBACK_PROJECTS so a brand-new install (or a
- *      downed app.buoy.fish) still renders something useful in the
- *      sidebar.
- *   2. `refreshProjectsInBackground()` fires-and-forgets. Writes to
- *      localStorage on success. The current session does NOT
- *      automatically re-render — the update lands for the next page
- *      load. This avoids surprising list jumps mid-session.
+ *      downed app.buoy.fish) still renders something useful.
+ *   2. `fetchProjects()` returns a promise that resolves to the live
+ *      list. Caller updates React state on success so the current
+ *      session reflects edits immediately (no stale-cache window).
+ *      Writes to localStorage on success so the next page load has a
+ *      best-effort starting list even before the new fetch resolves.
  *
- * The 5-minute TTL means an admin toggling a project's visibility in
- * app.buoy.fish Platform Admin propagates to map.buoy.fish on the next
- * page load that happens 5+ minutes later — satisfying the Phase 1
- * acceptance criterion in `projects-and-customers-reorg-plan.md`.
+ * Why this differs from `mapConfig.js`: map config rarely changes;
+ * project metadata changes during pilot/onboarding work, so a TTL-gated
+ * cache made edits invisible for up to 5 minutes. Fetching on every
+ * page load is cheap (a handful of rows of JSON) and removes the
+ * surprise.
  *
  * Public response shape (from /api/v1/public/projects):
  *   [{ code, name, lat, lng, zoom }, ...]
@@ -24,7 +25,6 @@
  */
 
 const CACHE_KEY = "projects_v1"
-const CACHE_TTL_MS = 5 * 60 * 1000  // 5 minutes
 const FETCH_TIMEOUT_MS = 4000
 
 const API_BASE_URL = process.env.BUOY_API_BASE_URL || ""
@@ -67,9 +67,8 @@ function readCache() {
         if (!raw) return null
         const parsed = JSON.parse(raw)
         const projects = normalizeProjectsList(parsed?.projects)
-        const fetchedAt = Number(parsed?.fetchedAt)
-        if (!projects || !isFiniteNumber(fetchedAt)) return null
-        return { projects, fetchedAt }
+        if (!projects) return null
+        return projects
     } catch (_) {
         return null
     }
@@ -96,27 +95,25 @@ function writeCache(projects) {
  */
 export function getInitialProjects() {
     const cached = readCache()
-    if (cached) return cached.projects
+    if (cached) return cached
     return [...FALLBACK_PROJECTS]
 }
 
 /**
- * Fire-and-forget refresh. Writes to cache on success; swallows errors
- * so a downed app.buoy.fish never breaks map.buoy.fish.
+ * Returns a Promise<projects[] | null>. Resolves with the live list on
+ * success (also writing it to localStorage); resolves with null on any
+ * failure (offline, CORS, shape mismatch, timeout). Caller is expected
+ * to update React state on a non-null result so the current session
+ * shows the freshest data.
  */
-export function refreshProjectsInBackground() {
-    if (!API_BASE_URL) return
-    const cached = readCache()
-    if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
-        // Cache is still fresh — skip the network roundtrip.
-        return
-    }
+export function fetchProjects() {
+    if (!API_BASE_URL) return Promise.resolve(null)
 
     const url = `${API_BASE_URL}/api/v1/public/projects`
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
 
-    fetch(url, { signal: controller.signal, headers: { Accept: "application/json" } })
+    return fetch(url, { signal: controller.signal, headers: { Accept: "application/json" } })
         .then((res) => {
             if (!res.ok) throw new Error(`HTTP ${res.status}`)
             return res.json()
@@ -124,7 +121,8 @@ export function refreshProjectsInBackground() {
         .then((data) => {
             const projects = normalizeProjectsList(data)
             if (projects) writeCache(projects)
+            return projects
         })
-        .catch(() => { /* offline / CORS / shape mismatch — try again next page load */ })
+        .catch(() => null)
         .finally(() => clearTimeout(timer))
 }
