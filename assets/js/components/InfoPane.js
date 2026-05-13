@@ -3,17 +3,16 @@ import classNames from 'classnames'
 import formatDistanceToNowStrict from 'date-fns/formatDistanceToNowStrict'
 import parseISO from 'date-fns/parseISO'
 import h3 from 'h3-js/dist/h3-js';
-
-const PROJECTS = [
-    { name: "Punta Abreojos, Baja", lat: 26.72, lng: -113.56, zoom: 12 },
-    { name: "Punta Eugenia, Baja", lat: 27.85, lng: -115.08, zoom: 12 },
-    // TODO: Pull project locations from app.buoy.fish API once projects are defined there
-    { name: "Nova Scotia", lat: 45.30, lng: -64.90, zoom: 10 },
-];
+import { getInitialProjects, refreshProjectsInBackground } from '../utils/projects'
 
 function InfoPane(props) {
     const [showLegendPane, setShowLegendPane] = React.useState(false)
     const [showProjectsPane, setShowProjectsPane] = React.useState(false)
+    // Projects list — cached/fallback at first paint, refreshed in the
+    // background for the next page load. See utils/projects.js for the
+    // cache + TTL contract.
+    const [projects] = React.useState(getInitialProjects)
+    React.useEffect(() => { refreshProjectsInBackground() }, [])
     const onLegendClick = () => { setShowLegendPane(!showLegendPane); setShowProjectsPane(false); }
     const onProjectsClick = () => { setShowProjectsPane(!showProjectsPane); setShowLegendPane(false); }
     const locale = navigator.language;
@@ -260,9 +259,9 @@ function InfoPane(props) {
             }
             { showProjectsPane &&
                 <div className="projects-pane">
-                    {PROJECTS.map(project => (
+                    {projects.map(project => (
                         <button
-                            key={project.name}
+                            key={project.code || project.name}
                             className="project-item"
                             onClick={() => { props.onFlyToProject(project); setShowProjectsPane(false); }}
                         >
