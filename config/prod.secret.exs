@@ -39,6 +39,12 @@ config :mappers, MappersWeb.Endpoint,
 # the /api/v1/admin/* routes (e.g. coverage purge). Must be set in production.
 config :mappers, :admin_token, System.get_env("MAPPERS_ADMIN_TOKEN")
 
+# Ingest API shared-secret token. Used by MappersWeb.Plug.IngestAuth to mark
+# trusted forwarders (app.buoy.fish, backfill task) so they bypass the
+# per-IP rate limiter. Unauthenticated ingest still works (per design) but
+# shares the 600/min/IP public bucket.
+config :mappers, :ingest_secret, System.get_env("MAP_INGEST_SECRET")
+
 # ## Using releases (Elixir v1.9+)
 #
 # If you are doing OTP releases, you need to instruct Phoenix

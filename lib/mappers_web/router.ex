@@ -15,6 +15,19 @@ defmodule MappersWeb.Router do
     plug MappersWeb.Plug.RateLimit, ["api_actions", 300]
   end
 
+  # Public ingest pipeline. Same per-IP rate limit envelope as :api for
+  # unauthenticated callers, but `IngestAuth` lets known forwarders
+  # (app.buoy.fish, mix mappers.backfill_buoy) flag themselves as trusted
+  # by sending `Authorization: Bearer <MAP_INGEST_SECRET>` — `RateLimit`
+  # then bypasses entirely. This keeps the endpoint open to community
+  # mappers per CLAUDE.md while letting our own services post at line
+  # rate without 429s.
+  pipeline :ingest_api do
+    plug :accepts, ["json"]
+    plug MappersWeb.Plug.IngestAuth
+    plug MappersWeb.Plug.RateLimit, ["ingest_actions", 600]
+  end
+
   pipeline :admin_api do
     plug :accepts, ["json"]
     plug MappersWeb.Plug.RateLimit, ["admin_actions", 60]
@@ -33,11 +46,17 @@ defmodule MappersWeb.Router do
     get "/metrics", PrometheusController, :scrape
   end
 
-  # Other scopes may use custom stacks.
+  # Ingest endpoint: separate pipeline so trusted forwarders can bypass
+  # the per-IP rate limiter that protects browser-facing reads.
+  scope "/api/v1", MappersWeb do
+    pipe_through :ingest_api
+
+    post "/ingest/uplink", API.V1.IngestUplinkController, :create
+  end
+
   scope "/api/v1", MappersWeb do
     pipe_through :api
 
-    post "/ingest/uplink", API.V1.IngestUplinkController, :create
     get "/uplinks/hex/:h3_index", API.V1.UplinkController, :get_uplinks
     get "/hexes", API.V1.HexController, :index
     get "/gateways", API.V1.GatewayController, :index

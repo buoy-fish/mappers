@@ -77,3 +77,7 @@ config :phoenix, :plug_init_mode, :runtime
 # Admin API shared-secret token (dev-only default).
 # Production value comes from MAPPERS_ADMIN_TOKEN env var in prod.secret.exs.
 config :mappers, :admin_token, System.get_env("MAPPERS_ADMIN_TOKEN") || "dev-admin-token"
+
+# Ingest API shared-secret token (dev-only default).
+# Production value comes from MAP_INGEST_SECRET env var in prod.secret.exs.
+config :mappers, :ingest_secret, System.get_env("MAP_INGEST_SECRET") || "dev-ingest-secret"
