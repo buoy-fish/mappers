@@ -139,7 +139,7 @@ function Map(props) {
     // Ref to synchronously track which hex was loaded by a user click.
     // Unlike useState, refs update immediately and are available in closures
     // without waiting for a re-render. This prevents the location useEffect
-    // from re-triggering simulateUplinkHexClick for a hex that onClick already loaded.
+    // and the deep-link selection effect from re-triggering for a hex that onClick already loaded.
     const clickedHexRef = useRef(null);
     const emptyFC = { type: "FeatureCollection", features: [] };
     const [uplinks, setUplinks] = useState(null);
@@ -152,6 +152,10 @@ function Map(props) {
     const [showWelcomeModal, setShowWelcomeModal] = useLocalStorageState('welcomeModalOpen_v1', true);
     const onCloseWelcomeModalClick = () => setShowWelcomeModal(false);
     const routerParams = props.routerParams;
+    // True when the URL targets a specific hex (/uplinks/hex/:hexId). Used to
+    // suppress the first-time WelcomeModal — a user arriving via a shared hex
+    // link wants the coverage, not the intro placard.
+    const isHexDeepLink = routerParams.hexId != null && routerParams.hexId !== 'undefined';
     const [initComplete, setInitComplete] = useState(false);
     const [lastPath, setLastPath] = useState(false);
     const [showHexPaneCloseButton, setShowHexPaneCloseButton] = useState(false);
@@ -261,27 +265,11 @@ function Map(props) {
                 .receive("ok", resp => { console.log("Joined successfully", resp) })
                 .receive("error", resp => { console.log("Unable to join", resp) })
 
-            if (routerParams.hexId != null) {
-                setTimeout(() => {
-                    simulateUplinkHexClick()
-                }, 500)
-            }
-
             setInitComplete(true);
         }
         else if (initComplete && location.pathname != lastPath) {
 
             setLastPath(location.pathname);
-            // Only simulate click for direct URL navigation (e.g. page load with /uplinks/hex/:id).
-            // Skip if the hex was already loaded by an onClick handler (avoids duplicate API calls
-            // and the infinite loop that occurs when rapidly clicking between two hexes).
-            // We use clickedHexRef (a synchronous ref) instead of hexId state because setState
-            // is async — the state value would be stale here and fail the guard.
-            if (routerParams.hexId != null && routerParams.hexId != 'undefined' && routerParams.hexId !== clickedHexRef.current) {
-                setTimeout(() => {
-                    simulateUplinkHexClick()
-                }, 500)
-            }
         }
 
     }, [location,])
@@ -324,25 +312,6 @@ function Map(props) {
                 { source: 'uplink-channel', id: selectedStateIdChannel },
                 { selected: true }
             );
-        }
-    }
-
-    const simulateUplinkHexClick = () => {
-        const map = mapRef.current?.getMap();
-        if (!map) return;
-
-        if (map.areTilesLoaded()) {
-            var features = map.querySourceFeatures('uplink-tileserver')
-            features.forEach(function (feature_i) {
-                if (feature_i.properties.id == routerParams.hexId) {
-                    feature_i.layer = { id: "public.h3_res9", layout: {}, source: "uplink-tileserver", type: "fill" }
-                    var syntheticEvent = { features: [feature_i] }
-                    onClick(syntheticEvent)
-                }
-            });
-        }
-        else {
-            setTimeout(() => { simulateUplinkHexClick() }, 500)
         }
     }
 
@@ -550,6 +519,30 @@ function Map(props) {
         }
     }, []);
 
+    // Deep-link selection. When the URL is /uplinks/hex/:hexId, select that hex
+    // once the coverage GeoJSON has loaded. Keyed on hexGeoJson rather than a
+    // fixed timer: the old approach fired a 500ms timer and queried map tiles
+    // that were still empty (the /api/v1/hexes fetch is ~2.4MB and lands well
+    // after 500ms), found nothing, and gave up — so deep links silently failed.
+    // Driving off the data we already hold in state is deterministic and
+    // race-free. clickedHexRef guards against re-running for a hex the user
+    // just clicked (onClick sets it synchronously before navigate()).
+    React.useEffect(() => {
+        const hexId = routerParams.hexId;
+        if (hexId == null || hexId === 'undefined') return;
+        if (hexId === clickedHexRef.current) return;
+        const feature = (hexGeoJson.features || []).find(
+            f => f.properties && f.properties.id === hexId
+        );
+        if (!feature) return;
+        clickedHexRef.current = hexId;
+        const synthetic = {
+            ...feature,
+            layer: { id: "public.h3_res9", layout: {}, source: "uplink-tileserver", type: "fill" }
+        };
+        onClick({ features: [synthetic] });
+    }, [hexGeoJson, routerParams.hexId]);
+
     const onFlyToProject = useCallback(project => {
         setViewState(prev => ({
             ...prev,
@@ -633,7 +626,7 @@ function Map(props) {
 
             </MapGL>
             <InfoPane hexId={hexId} bestRssi={bestRssi} snr={snr} uplinks={uplinks} gatewayRecords={gatewayRecords} showHexPane={showHexPane} onCloseHexPaneClick={onCloseHexPaneClick} showHexPaneCloseButton={showHexPaneCloseButton} showGateways={showGateways} onToggleGateways={() => setShowGateways(!showGateways)} hideCoverage={hideCoverage} onToggleCoverage={() => setHideCoverage(!hideCoverage)} onFlyToProject={onFlyToProject} darkSatellite={darkSatellite} onToggleDarkSatellite={USE_MAPBOX ? () => setDarkSatellite(!darkSatellite) : null} />
-            <WelcomeModal showWelcomeModal={showWelcomeModal} onCloseWelcomeModalClick={onCloseWelcomeModalClick} />
+            <WelcomeModal showWelcomeModal={showWelcomeModal && !isHexDeepLink} onCloseWelcomeModalClick={onCloseWelcomeModalClick} />
         </div>
     );
 }
