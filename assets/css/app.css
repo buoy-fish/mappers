@@ -317,7 +317,20 @@ body {
   border-collapse: collapse;
   text-align: left;
   width: 100%;
+  table-layout: fixed;
   /*min-width: 480px;*/
+}
+.hotspots-table th:nth-child(2),
+.hotspots-table td:nth-child(2) {
+  width: 4.5rem; /* RSSI: -000 dBm */
+}
+.hotspots-table th:nth-child(3),
+.hotspots-table td:nth-child(3) {
+  width: 3.25rem; /* SNR: -00.00 */
+}
+.hotspots-table th:nth-child(4),
+.hotspots-table td:nth-child(4) {
+  width: 3.75rem; /* Dist: 000 km */
 }
 .hotspot-table-head {
   position: sticky;
@@ -342,7 +355,8 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: calc(100vw - 14rem); /*hacking in some text overflow*/
+  /* table-layout: fixed on .hotspots-table + sized numeric columns
+     gives this cell the remaining width; truncation works automatically. */
 }
 .animal-cell > div {
   white-space: nowrap;
