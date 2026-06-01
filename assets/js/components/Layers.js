@@ -127,6 +127,32 @@ export const gatewayLabelLayer = {
     }
 };
 
+// Timeline-mode coverage layer. Same orange RSSI gradient + outline as the
+// live `uplinkTileServerLayer` so historical hexes match the live view's
+// colors exactly. Selection feature-state isn't wired for this layer in this
+// slice, so we drop the `case`/`feature-state 'selected'` wrapper and use the
+// plain interpolate expression. Slice 5 will add a `first_seen <= cursor`
+// filter for the reveal animation; no filter here (render all hexes).
+export const timelineLayer = {
+    id: 'timelineLayer',
+    type: 'fill',
+    paint: {
+        'fill-color': [
+            'interpolate',
+            ['linear'],
+            ['get', 'best_rssi'],
+            -120,
+            'rgba(255,152,0,0.15)',
+            -100,
+            'rgba(255,152,0,0.5)',
+            -80,
+            'rgba(255,152,0,0.85)'
+        ],
+        'fill-opacity': 0.9,
+        'fill-outline-color': '#ffffff'
+    }
+};
+
 export const uplinkChannelLayer = {
     id: 'uplinkChannelLayer',
     type: 'fill',

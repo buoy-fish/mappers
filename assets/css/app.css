@@ -123,6 +123,12 @@ body {
 .nav-link a:hover {
   text-decoration: underline;
 }
+/* Timeline mode active indication: subtle Buoy.Fish orange underline + weight. */
+.nav-link button.nav-timeline.active {
+  color: #FF9800;
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 0 #FF9800;
+}
 
 .legend-transition-enter-active {
   transition: transform 0.2s ease-out, opacity 0.22s ease-out;

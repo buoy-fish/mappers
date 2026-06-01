@@ -161,6 +161,12 @@ function InfoPane(props) {
                 <span className="mappers-logo" style={{fontSize: '1.25rem', fontWeight: 700, letterSpacing: '-0.01em'}}>Buoy.Fish Coverage</span>
                 <ul className="nav-links">
                     <li className="nav-link">
+                        <button
+                            className={classNames("nav-timeline", { active: props.timelineMode })}
+                            onClick={props.onToggleTimeline}
+                        >Timeline</button>
+                    </li>
+                    <li className="nav-link">
                         <button onClick={onLegendClick}>Legend</button>
                     </li>
                     <li className="nav-link">
