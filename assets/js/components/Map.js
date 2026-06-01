@@ -13,7 +13,8 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import InfoPane from "../components/InfoPane"
 import WelcomeModal from "../components/WelcomeModal"
-import { uplinkTileServerLayer, uplinkHotspotsLineLayer, uplinkRelayLineLayer, uplinkHotspotsCircleLayer, uplinkHotspotsHexLayer, uplinkChannelLayer, gatewayMarkerLayer, gatewayLabelLayer, selectedHexLayer, timelineLayer } from './Layers.js';
+import TimelineControl, { startOfLocalDay, endOfLocalDay } from "../components/TimelineControl"
+import { uplinkTileServerLayer, uplinkHotspotsLineLayer, uplinkRelayLineLayer, uplinkHotspotsCircleLayer, uplinkHotspotsHexLayer, uplinkChannelLayer, gatewayMarkerLayer, gatewayLabelLayer, selectedHexLayer, timelineRevealLayer, timelineBaselineLayer } from './Layers.js';
 import { get } from '../data/Rest'
 import { geoToH3, h3ToGeo, h3ToGeoBoundary } from "h3-js";
 import socket from "../socket";
@@ -173,6 +174,151 @@ function Map(props) {
     const [timelineGeoJson, setTimelineGeoJson] = useState(emptyFC);
     const timelineModeRef = useRef(false);
     React.useEffect(() => { timelineModeRef.current = timelineMode; }, [timelineMode]);
+
+    // ------------------------------------------------------------------
+    // Timeline control state. Lifted here so the two timeline Layers'
+    // filters stay declarative props driven by rangeStart / cursor.
+    //   - rangeStart / rangeEnd: window handles, snapped to LOCAL whole days.
+    //   - cursor: continuous epoch-ms playhead ("coverage as-of this instant").
+    //   - playing / speed / showBaseline: playback + display knobs.
+    // A full sweep of [rangeStart, rangeEnd] takes ~20s at 1x, divided by speed.
+    // ------------------------------------------------------------------
+    const TIMELINE_SWEEP_MS = 20000;
+    const [rangeStart, setRangeStart] = useState(0);
+    const [rangeEnd, setRangeEnd] = useState(0);
+    const [cursor, setCursor] = useState(0);
+    const [playing, setPlaying] = useState(false);
+    const [speed, setSpeed] = useState(1);
+    const [showBaseline, setShowBaseline] = useState(true);
+
+    // Time domain of the loaded timeline data: [minT, maxT] over first_seen.
+    // Memoized so handle/playhead math has a stable domain. When there are no
+    // features (or none with first_seen), minT/maxT are null and the control is
+    // not rendered (see render path).
+    const timeDomain = React.useMemo(() => {
+        const feats = timelineGeoJson.features || [];
+        let minT = null, maxT = null;
+        for (const f of feats) {
+            const t = f.properties && f.properties.first_seen;
+            if (typeof t !== 'number') continue;
+            if (minT === null || t < minT) minT = t;
+            if (maxT === null || t > maxT) maxT = t;
+        }
+        return { minT, maxT };
+    }, [timelineGeoJson]);
+
+    // inRangeCount: number of features whose first_seen falls in the selected
+    // window. Drives the "No new coverage in this range" empty-state caption.
+    const inRangeCount = React.useMemo(() => {
+        const feats = timelineGeoJson.features || [];
+        let n = 0;
+        for (const f of feats) {
+            const t = f.properties && f.properties.first_seen;
+            if (typeof t !== 'number') continue;
+            if (t >= rangeStart && t <= rangeEnd) n++;
+        }
+        return n;
+    }, [timelineGeoJson, rangeStart, rangeEnd]);
+
+    // On entering timeline mode (once the domain is known), initialize the
+    // window to all-time and park the cursor at rangeEnd so the full current
+    // footprint shows immediately (matching the live view). Re-runs if the
+    // domain changes (e.g. data arrives after entering the mode).
+    React.useEffect(() => {
+        if (!timelineMode) return;
+        const { minT, maxT } = timeDomain;
+        if (minT === null || maxT === null) return;
+        const start = startOfLocalDay(minT);
+        const end = endOfLocalDay(maxT);
+        setRangeStart(start);
+        setRangeEnd(end);
+        setCursor(end);
+        setPlaying(false);
+    }, [timelineMode, timeDomain]);
+
+    // Animation loop. rAF with a timestamp delta (no 60fps assumption). A full
+    // sweep of the selected range takes TIMELINE_SWEEP_MS / speed; on reaching
+    // rangeEnd we LOOP back to rangeStart (loop is always-on). Refs mirror the
+    // state the loop needs so the rAF closure (created once per play) reads
+    // live values without re-subscribing each frame. Declared AFTER the state
+    // they mirror to dodge the minifier TDZ gotcha.
+    const rafRef = useRef(null);
+    const lastTsRef = useRef(0);
+    const rangeStartRef = useRef(rangeStart);
+    const rangeEndRef = useRef(rangeEnd);
+    const speedRef = useRef(speed);
+    const cursorRef = useRef(cursor);
+    React.useEffect(() => { rangeStartRef.current = rangeStart; }, [rangeStart]);
+    React.useEffect(() => { rangeEndRef.current = rangeEnd; }, [rangeEnd]);
+    React.useEffect(() => { speedRef.current = speed; }, [speed]);
+    React.useEffect(() => { cursorRef.current = cursor; }, [cursor]);
+
+    const stopRaf = useCallback(() => {
+        if (rafRef.current != null) {
+            cancelAnimationFrame(rafRef.current);
+            rafRef.current = null;
+        }
+    }, []);
+
+    React.useEffect(() => {
+        if (!playing) { stopRaf(); return; }
+        const { minT, maxT } = timeDomain;
+        if (minT === null || maxT === null) { setPlaying(false); return; }
+        // On play: if parked at (or past) the end, restart the sweep at the
+        // range start.
+        if (cursorRef.current >= rangeEndRef.current) {
+            cursorRef.current = rangeStartRef.current;
+            setCursor(rangeStartRef.current);
+        }
+        lastTsRef.current = 0;
+        const tick = (ts) => {
+            if (lastTsRef.current === 0) lastTsRef.current = ts;
+            const dtMs = ts - lastTsRef.current;
+            lastTsRef.current = ts;
+            const span = Math.max(1, rangeEndRef.current - rangeStartRef.current);
+            // data-ms advanced this frame = span * (wallclock-dt / sweepDuration)
+            const sweepDuration = TIMELINE_SWEEP_MS / speedRef.current;
+            const advance = span * (dtMs / sweepDuration);
+            let next = cursorRef.current + advance;
+            if (next >= rangeEndRef.current) {
+                // Loop: wrap back to the start and keep going.
+                next = rangeStartRef.current;
+            }
+            cursorRef.current = next;
+            setCursor(next);
+            rafRef.current = requestAnimationFrame(tick);
+        };
+        rafRef.current = requestAnimationFrame(tick);
+        return stopRaf;
+    }, [playing, timeDomain, stopRaf]);
+
+    // Stop playback + cancel rAF when leaving timeline mode or unmounting.
+    React.useEffect(() => {
+        if (!timelineMode) { setPlaying(false); stopRaf(); }
+    }, [timelineMode, stopRaf]);
+    React.useEffect(() => () => stopRaf(), [stopRaf]);
+
+    // Control callbacks. Dragging the playhead / setting the cursor manually is
+    // a scrub and should not need to pause here (TimelineControl pauses on
+    // playhead drag); these are plain setters used by the control.
+    const onSetCursor = useCallback(v => setCursor(v), []);
+    const onSetRangeStart = useCallback(v => setRangeStart(v), []);
+    const onSetRangeEnd = useCallback(v => setRangeEnd(v), []);
+    const onTogglePlay = useCallback(() => setPlaying(p => !p), []);
+    const onSetSpeed = useCallback(s => setSpeed(s), []);
+    const onToggleBaseline = useCallback(() => setShowBaseline(b => !b), []);
+
+    // Declarative MapLibre filters for the two timeline layers, driven by state.
+    //   Bloom:    in-range hexes revealed up to the cursor.
+    //   Baseline: pre-range footprint (first_seen < rangeStart).
+    const timelineRevealFilter = React.useMemo(() => ([
+        'all',
+        ['>=', ['get', 'first_seen'], rangeStart],
+        ['<=', ['get', 'first_seen'], cursor]
+    ]), [rangeStart, cursor]);
+    const timelineBaselineFilter = React.useMemo(() => ([
+        '<', ['get', 'first_seen'], rangeStart
+    ]), [rangeStart]);
     // Dark/light satellite toggle. Default true (dark) so first-time visitors
     // see the visually punchy treatment that lets coverage hexes pop. Persisted
     // per-browser via localStorage so users keep their preference across visits.
@@ -549,7 +695,7 @@ function Map(props) {
 
                     setTimeout(() => { setShowHexPaneCloseButton(true); }, 1000)
                 }
-                else if (feature.layer.id == "timelineLayer") {
+                else if (feature.layer.id == "timelineRevealLayer" || feature.layer.id == "timelineBaselineLayer") {
                     // Timeline hexes open the same InfoPane as live hexes. The
                     // detail (hotspot list, distances) comes from
                     // /api/v1/uplinks/hex/:id, which works for any hex. Timeline
@@ -614,7 +760,7 @@ function Map(props) {
         applySatelliteTreatment(map, darkSatellite ? SATELLITE_DARK_TREATMENT : SATELLITE_LIGHT_TREATMENT);
     }, [darkSatellite]);
 
-    const interactiveLayerIds = ['public.h3_res9', 'uplinkChannelLayer', 'timelineLayer'];
+    const interactiveLayerIds = ['public.h3_res9', 'uplinkChannelLayer', 'timelineRevealLayer', 'timelineBaselineLayer'];
 
     return (
         <div className='map-container'>
@@ -649,7 +795,11 @@ function Map(props) {
                     otherwise we render the live sources exactly as before. */}
                 {timelineMode &&
                     <Source id="timeline" type="geojson" data={timelineGeoJson}>
-                        <Layer {...timelineLayer} />
+                        {/* Baseline declared FIRST so the bloom paints on top. */}
+                        {showBaseline &&
+                            <Layer {...timelineBaselineLayer} filter={timelineBaselineFilter} />
+                        }
+                        <Layer {...timelineRevealLayer} filter={timelineRevealFilter} />
                     </Source>
                 }
                 {!timelineMode && !hideCoverage &&
@@ -686,6 +836,25 @@ function Map(props) {
 
             </MapGL>
             <InfoPane hexId={hexId} bestRssi={bestRssi} snr={snr} uplinks={uplinks} gatewayRecords={gatewayRecords} showHexPane={showHexPane} onCloseHexPaneClick={onCloseHexPaneClick} showHexPaneCloseButton={showHexPaneCloseButton} showGateways={showGateways} onToggleGateways={() => setShowGateways(!showGateways)} hideCoverage={hideCoverage} onToggleCoverage={() => setHideCoverage(!hideCoverage)} timelineMode={timelineMode} onToggleTimeline={() => setTimelineMode(v => !v)} onFlyToProject={onFlyToProject} darkSatellite={darkSatellite} onToggleDarkSatellite={USE_MAPBOX ? () => setDarkSatellite(!darkSatellite) : null} />
+            {timelineMode && timeDomain.minT !== null && timeDomain.maxT !== null &&
+                <TimelineControl
+                    minT={timeDomain.minT}
+                    maxT={timeDomain.maxT}
+                    rangeStart={rangeStart}
+                    rangeEnd={rangeEnd}
+                    cursor={cursor}
+                    playing={playing}
+                    speed={speed}
+                    showBaseline={showBaseline}
+                    inRangeCount={inRangeCount}
+                    onSetRangeStart={onSetRangeStart}
+                    onSetRangeEnd={onSetRangeEnd}
+                    onSetCursor={onSetCursor}
+                    onTogglePlay={onTogglePlay}
+                    onSetSpeed={onSetSpeed}
+                    onToggleBaseline={onToggleBaseline}
+                />
+            }
             <WelcomeModal showWelcomeModal={showWelcomeModal && !isHexDeepLink} onCloseWelcomeModalClick={onCloseWelcomeModalClick} />
         </div>
     );

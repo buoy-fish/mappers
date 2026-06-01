@@ -435,6 +435,150 @@ body {
 
 /** end main stats stuff **/
 
+/** start timeline control **/
+/* Bottom-center overlay, above the map, non-blocking. Dark UI + Buoy.Fish
+   orange (#FF9800), matching .legend / .gateway-switch. */
+.timeline-control {
+  position: fixed;
+  left: 50%;
+  bottom: 1.5rem;
+  transform: translateX(-50%);
+  z-index: 5;
+  width: min(640px, calc(100vw - 2rem));
+  padding: 0.75rem 1rem;
+  background: rgba(20, 20, 24, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 0.8125rem;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.timeline-control-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.timeline-control-row-secondary {
+  margin-top: 0.625rem;
+  justify-content: space-between;
+}
+.timeline-playpause {
+  flex: 0 0 auto;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 9999px;
+  border: none;
+  cursor: pointer;
+  background: #FF9800;
+  color: #141418;
+  font-size: 0.875rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease;
+}
+.timeline-playpause:hover {
+  background: #ffac33;
+}
+.timeline-track-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.timeline-track {
+  position: relative;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.15);
+  cursor: pointer;
+}
+/* Selected-range highlight beneath handles/playhead. */
+.timeline-range-fill {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: rgba(255, 152, 0, 0.35);
+  border-radius: 9999px;
+  pointer-events: none;
+}
+.timeline-playhead {
+  position: absolute;
+  top: 50%;
+  width: 0.875rem;
+  height: 0.875rem;
+  margin-left: -0.4375rem;
+  transform: translateY(-50%);
+  border-radius: 9999px;
+  background: #fff;
+  border: 2px solid #FF9800;
+  cursor: grab;
+  z-index: 3;
+}
+.timeline-playhead:active {
+  cursor: grabbing;
+}
+.timeline-handle {
+  position: absolute;
+  top: 50%;
+  width: 0.625rem;
+  height: 1.125rem;
+  margin-left: -0.3125rem;
+  transform: translateY(-50%);
+  border-radius: 3px;
+  background: #FF9800;
+  border: 1px solid rgba(0, 0, 0, 0.4);
+  cursor: ew-resize;
+  z-index: 2;
+}
+.timeline-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.4375rem;
+  font-size: 0.6875rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+.timeline-label-cursor {
+  color: #FF9800;
+  font-weight: 600;
+}
+.timeline-speed {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 0.25rem;
+}
+.timeline-speed-btn {
+  min-width: 1.75rem;
+  height: 1.5rem;
+  padding: 0 0.375rem;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.timeline-speed-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+.timeline-speed-btn.active {
+  background: #FF9800;
+  border-color: #FF9800;
+  color: #141418;
+  font-weight: 600;
+}
+.timeline-baseline-toggle {
+  font-size: 0.8125rem;
+}
+.timeline-empty-caption {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.65);
+  font-style: italic;
+}
+/*end timeline control*/
+
 /** start welcome modal **/
 
 .modal-backdrop {
