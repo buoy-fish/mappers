@@ -64,20 +64,23 @@ function TimelineControl(props) {
     // Which thing is being dragged: 'start' | 'end' | 'playhead' | null.
     const dragRef = useRef(null);
 
-    const domainSpan = Math.max(1, maxT - minT); // guard divide-by-zero
+    // Track domain is day-snapped so whole-day-snapped handles map exactly to 0%-100%.
+    const domainMin = startOfLocalDay(minT);
+    const domainMax = endOfLocalDay(maxT);
+    const domainSpan = Math.max(1, domainMax - domainMin); // guard divide-by-zero
 
     // time -> fraction [0,1] across the full data domain.
-    const tToFrac = useCallback((t) => (t - minT) / domainSpan, [minT, domainSpan]);
+    const tToFrac = useCallback((t) => (t - domainMin) / domainSpan, [domainMin, domainSpan]);
 
-    // A clientX pixel -> epoch-ms over the full data domain [minT, maxT].
+    // A clientX pixel -> epoch-ms over the full data domain [domainMin, domainMax].
     const pxToTime = useCallback((clientX) => {
         const el = trackRef.current;
-        if (!el) return minT;
+        if (!el) return domainMin;
         const rect = el.getBoundingClientRect();
         let frac = (clientX - rect.left) / Math.max(1, rect.width);
         frac = Math.min(1, Math.max(0, frac));
-        return minT + frac * domainSpan;
-    }, [minT, domainSpan]);
+        return domainMin + frac * domainSpan;
+    }, [domainMin, domainSpan]);
 
     const onPointerMove = useCallback((e) => {
         const mode = dragRef.current;
