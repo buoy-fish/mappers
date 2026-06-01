@@ -13,7 +13,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import InfoPane from "../components/InfoPane"
 import WelcomeModal from "../components/WelcomeModal"
-import { uplinkTileServerLayer, uplinkHotspotsLineLayer, uplinkRelayLineLayer, uplinkHotspotsCircleLayer, uplinkHotspotsHexLayer, uplinkChannelLayer, gatewayMarkerLayer, gatewayLabelLayer, selectedHexLayer } from './Layers.js';
+import { uplinkTileServerLayer, uplinkHotspotsLineLayer, uplinkRelayLineLayer, uplinkHotspotsCircleLayer, uplinkHotspotsHexLayer, uplinkChannelLayer, gatewayMarkerLayer, gatewayLabelLayer, selectedHexLayer, timelineLayer } from './Layers.js';
 import { get } from '../data/Rest'
 import { geoToH3, h3ToGeo, h3ToGeoBoundary } from "h3-js";
 import socket from "../socket";
@@ -164,6 +164,15 @@ function Map(props) {
     const [gatewayRecords, setGatewayRecords] = useState({});
     const [showGateways, setShowGateways] = useState(false);
     const [hideCoverage, setHideCoverage] = useState(false);
+    // Timeline mode: when on, we mount a separate static render path showing
+    // all confirmed-coverage hexes (fetched from /api/v1/coverage/timeline) and
+    // suppress the live uplink-tileserver / uplink-channel sources. The live
+    // h3:new channel handler is frozen via timelineModeRef (declared below the
+    // state it mirrors, to dodge the minifier TDZ gotcha).
+    const [timelineMode, setTimelineMode] = useState(false);
+    const [timelineGeoJson, setTimelineGeoJson] = useState(emptyFC);
+    const timelineModeRef = useRef(false);
+    React.useEffect(() => { timelineModeRef.current = timelineMode; }, [timelineMode]);
     // Dark/light satellite toggle. Default true (dark) so first-time visitors
     // see the visually punchy treatment that lets coverage hexes pop. Persisted
     // per-browser via localStorage so users keep their preference across visits.
@@ -244,11 +253,36 @@ function Map(props) {
             .catch(err => console.error('Failed to load gateway data:', err));
     }, []);
 
+    // Timeline data fetch. Triggered when entering timeline mode. The endpoint
+    // returns a COMPACT array ([{h, t, r}, ...]), NOT GeoJSON — we map each row
+    // into a GeoJSON Polygon Feature here (mirroring selectedHexGeoJson's use of
+    // h3ToGeoBoundary). Refetch-on-enter is fine since the endpoint is
+    // parameterless; the cache guard skips refetch once features are loaded.
+    React.useEffect(() => {
+        if (!timelineMode) return;
+        if (timelineGeoJson.features && timelineGeoJson.features.length > 0) return;
+        fetch('/api/v1/coverage/timeline')
+            .then(res => res.json())
+            .then(rows => {
+                const features = (rows || []).map(row => ({
+                    type: "Feature",
+                    geometry: { type: "Polygon", coordinates: [h3ToGeoBoundary(row.h, true)] },
+                    properties: { id: row.h, best_rssi: row.r, first_seen: row.t }
+                }));
+                setTimelineGeoJson({ type: "FeatureCollection", features });
+            })
+            .catch(err => console.error('Failed to load timeline data:', err));
+    }, [timelineMode]);
+
     React.useEffect(() => {
         if (!initComplete && location.pathname != lastPath) {
             setLastPath(location.pathname);
             let features = []
             channel.on("new_h3", payload => {
+                // Freeze the live channel while in timeline mode so a historical
+                // view doesn't twitch as live uplinks land. timelineModeRef is a
+                // ref (not state) because this handler closure is created once.
+                if (timelineModeRef.current) return;
                 var new_feature = geojson2h3.h3ToFeature(payload.body.id_string, { 'id': payload.body.id, 'id_string': payload.body.id_string, 'best_rssi': payload.body.best_rssi, 'snr': payload.body.snr })
                 new_feature.id = payload.body.id
                 features.push(new_feature)
@@ -515,6 +549,24 @@ function Map(props) {
 
                     setTimeout(() => { setShowHexPaneCloseButton(true); }, 1000)
                 }
+                else if (feature.layer.id == "timelineLayer") {
+                    // Timeline hexes open the same InfoPane as live hexes. The
+                    // detail (hotspot list, distances) comes from
+                    // /api/v1/uplinks/hex/:id, which works for any hex. Timeline
+                    // features carry NO `snr` property (the endpoint omits it),
+                    // so we pass null rather than calling .toFixed on undefined —
+                    // InfoPane tolerates a null/empty snr. Feature-state
+                    // selection highlighting is skipped for timeline hexes in
+                    // this slice.
+                    clickedHexRef.current = feature.properties.id;
+                    setHexId(feature.properties.id);
+                    setBestRssi(feature.properties.best_rssi);
+                    setSnr(null);
+                    getHex(feature.properties.id);
+                    setShowHexPane(true);
+                    navigate("/uplinks/hex/" + feature.properties.id);
+                    setTimeout(() => { setShowHexPaneCloseButton(true); }, 1000)
+                }
             });
         }
     }, []);
@@ -562,7 +614,7 @@ function Map(props) {
         applySatelliteTreatment(map, darkSatellite ? SATELLITE_DARK_TREATMENT : SATELLITE_LIGHT_TREATMENT);
     }, [darkSatellite]);
 
-    const interactiveLayerIds = ['public.h3_res9', 'uplinkChannelLayer'];
+    const interactiveLayerIds = ['public.h3_res9', 'uplinkChannelLayer', 'timelineLayer'];
 
     return (
         <div className='map-container'>
@@ -592,12 +644,20 @@ function Map(props) {
                     position="top-right"
                 />
                 <NavigationControl position="top-right" />
-                {!hideCoverage &&
+                {/* Two render paths. In timeline mode we mount the static
+                    historical-coverage source and suppress both live sources;
+                    otherwise we render the live sources exactly as before. */}
+                {timelineMode &&
+                    <Source id="timeline" type="geojson" data={timelineGeoJson}>
+                        <Layer {...timelineLayer} />
+                    </Source>
+                }
+                {!timelineMode && !hideCoverage &&
                     <Source id="uplink-tileserver" type="geojson" data={hexGeoJson}>
                         <Layer {...uplinkTileServerLayer} />
                     </Source>
                 }
-                {!hideCoverage &&
+                {!timelineMode && !hideCoverage &&
                     <Source id="uplink-channel" type="geojson" data={uplinkChannelData}>
                         <Layer {...uplinkChannelLayer} />
                     </Source>
@@ -625,7 +685,7 @@ function Map(props) {
                 }
 
             </MapGL>
-            <InfoPane hexId={hexId} bestRssi={bestRssi} snr={snr} uplinks={uplinks} gatewayRecords={gatewayRecords} showHexPane={showHexPane} onCloseHexPaneClick={onCloseHexPaneClick} showHexPaneCloseButton={showHexPaneCloseButton} showGateways={showGateways} onToggleGateways={() => setShowGateways(!showGateways)} hideCoverage={hideCoverage} onToggleCoverage={() => setHideCoverage(!hideCoverage)} onFlyToProject={onFlyToProject} darkSatellite={darkSatellite} onToggleDarkSatellite={USE_MAPBOX ? () => setDarkSatellite(!darkSatellite) : null} />
+            <InfoPane hexId={hexId} bestRssi={bestRssi} snr={snr} uplinks={uplinks} gatewayRecords={gatewayRecords} showHexPane={showHexPane} onCloseHexPaneClick={onCloseHexPaneClick} showHexPaneCloseButton={showHexPaneCloseButton} showGateways={showGateways} onToggleGateways={() => setShowGateways(!showGateways)} hideCoverage={hideCoverage} onToggleCoverage={() => setHideCoverage(!hideCoverage)} timelineMode={timelineMode} onToggleTimeline={() => setTimelineMode(v => !v)} onFlyToProject={onFlyToProject} darkSatellite={darkSatellite} onToggleDarkSatellite={USE_MAPBOX ? () => setDarkSatellite(!darkSatellite) : null} />
             <WelcomeModal showWelcomeModal={showWelcomeModal && !isHexDeepLink} onCloseWelcomeModalClick={onCloseWelcomeModalClick} />
         </div>
     );
