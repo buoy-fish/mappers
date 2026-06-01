@@ -58,6 +58,7 @@ function TimelineControl(props) {
         inRangeCount,
         onSetRangeStart, onSetRangeEnd,
         onSetCursor, onTogglePlay, onSetSpeed, onToggleBaseline,
+        onExit,
     } = props;
 
     const trackRef = useRef(null);
@@ -195,6 +196,14 @@ function TimelineControl(props) {
                         >{s}×</button>
                     ))}
                 </div>
+
+                {/* Exit Timeline mode (replaces the old standalone nav toggle). */}
+                <button
+                    className="timeline-exit"
+                    onClick={onExit}
+                    aria-label="Exit timeline"
+                    title="Exit timeline"
+                >✕</button>
             </div>
 
             <div className="timeline-control-row timeline-control-row-secondary">

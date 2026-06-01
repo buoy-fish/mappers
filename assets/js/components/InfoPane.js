@@ -161,12 +161,6 @@ function InfoPane(props) {
                 <span className="mappers-logo" style={{fontSize: '1.25rem', fontWeight: 700, letterSpacing: '-0.01em'}}>Buoy.Fish Coverage</span>
                 <ul className="nav-links">
                     <li className="nav-link">
-                        <button
-                            className={classNames("nav-timeline", { active: props.timelineMode })}
-                            onClick={props.onToggleTimeline}
-                        >Timeline</button>
-                    </li>
-                    <li className="nav-link">
                         <button onClick={onLegendClick}>Legend</button>
                     </li>
                     <li className="nav-link">
@@ -272,13 +266,19 @@ function InfoPane(props) {
             { showProjectsPane &&
                 <div className="projects-pane">
                     {projects.map(project => (
-                        <button
-                            key={project.code || project.name}
-                            className="project-item"
-                            onClick={() => { props.onFlyToProject(project); setShowProjectsPane(false); }}
-                        >
-                            {project.name}
-                        </button>
+                        <div key={project.code || project.name} className="project-row">
+                            <button
+                                className="project-item"
+                                onClick={() => { props.onFlyToProject(project); setShowProjectsPane(false); }}
+                            >
+                                {project.name}
+                            </button>
+                            <button
+                                className="project-timeline-btn"
+                                title="Run coverage timeline for this region"
+                                onClick={() => { props.onRunProjectTimeline(project); setShowProjectsPane(false); }}
+                            >▶ Timeline</button>
+                        </div>
                     ))}
                 </div>
             }

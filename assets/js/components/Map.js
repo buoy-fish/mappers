@@ -750,6 +750,19 @@ function Map(props) {
         }));
     }, []);
 
+    // Run the (global) Timeline framed on a project's region: fly there, then
+    // enter Timeline mode. No data scoping — the timeline stays global; we only
+    // frame the view on the project.
+    const onRunProjectTimeline = useCallback((project) => {
+        setViewState(prev => ({
+            ...prev,
+            latitude: project.lat,
+            longitude: project.lng,
+            zoom: project.zoom || 12
+        }));
+        setTimelineMode(true);
+    }, []);
+
     // Re-apply satellite treatment whenever the user toggles the theme.
     // Initial application happens via the MapGL onLoad callback below; this
     // effect only handles user-initiated toggles after the map is loaded.
@@ -835,7 +848,7 @@ function Map(props) {
                 }
 
             </MapGL>
-            <InfoPane hexId={hexId} bestRssi={bestRssi} snr={snr} uplinks={uplinks} gatewayRecords={gatewayRecords} showHexPane={showHexPane} onCloseHexPaneClick={onCloseHexPaneClick} showHexPaneCloseButton={showHexPaneCloseButton} showGateways={showGateways} onToggleGateways={() => setShowGateways(!showGateways)} hideCoverage={hideCoverage} onToggleCoverage={() => setHideCoverage(!hideCoverage)} timelineMode={timelineMode} onToggleTimeline={() => setTimelineMode(v => !v)} onFlyToProject={onFlyToProject} darkSatellite={darkSatellite} onToggleDarkSatellite={USE_MAPBOX ? () => setDarkSatellite(!darkSatellite) : null} />
+            <InfoPane hexId={hexId} bestRssi={bestRssi} snr={snr} uplinks={uplinks} gatewayRecords={gatewayRecords} showHexPane={showHexPane} onCloseHexPaneClick={onCloseHexPaneClick} showHexPaneCloseButton={showHexPaneCloseButton} showGateways={showGateways} onToggleGateways={() => setShowGateways(!showGateways)} hideCoverage={hideCoverage} onToggleCoverage={() => setHideCoverage(!hideCoverage)} onFlyToProject={onFlyToProject} onRunProjectTimeline={onRunProjectTimeline} darkSatellite={darkSatellite} onToggleDarkSatellite={USE_MAPBOX ? () => setDarkSatellite(!darkSatellite) : null} />
             {timelineMode && timeDomain.minT !== null && timeDomain.maxT !== null &&
                 <TimelineControl
                     minT={timeDomain.minT}
@@ -853,6 +866,7 @@ function Map(props) {
                     onTogglePlay={onTogglePlay}
                     onSetSpeed={onSetSpeed}
                     onToggleBaseline={onToggleBaseline}
+                    onExit={() => setTimelineMode(false)}
                 />
             }
             <WelcomeModal showWelcomeModal={showWelcomeModal && !isHexDeepLink} onCloseWelcomeModalClick={onCloseWelcomeModalClick} />
