@@ -12,6 +12,7 @@
 #   ./scripts/dev.sh --clean      # Clean build artifacts before starting
 #   ./scripts/dev.sh --restart    # Kill running server and restart
 #   ./scripts/dev.sh --kill       # Kill running dev services
+#   ./scripts/dev.sh --sync-db    # Pull prod coverage DB into local, then start
 #   ./scripts/dev.sh --help       # Show help
 #
 # Requires: Elixir, Node.js, PostgreSQL with PostGIS
@@ -40,6 +41,7 @@ echo "==========================================="
 # Parse arguments
 CLEAN_BUILD=false
 RESTART_MODE=false
+SYNC_DB=false
 
 for arg in "$@"; do
     case $arg in
@@ -48,6 +50,9 @@ for arg in "$@"; do
             ;;
         --restart)
             RESTART_MODE=true
+            ;;
+        --sync-db)
+            SYNC_DB=true
             ;;
         --kill)
             echo "Killing development services..."
@@ -66,7 +71,13 @@ for arg in "$@"; do
             echo "  --clean      Clean build artifacts before starting"
             echo "  --restart    Kill running server, recompile, and restart"
             echo "  --kill       Kill all running dev services"
+            echo "  --sync-db    Pull the prod coverage DB into the local dev DB,"
+            echo "               run migrations + first_seen backfill, then start"
             echo "  --help, -h   Show this help message"
+            echo ""
+            echo "Sync (--sync-db) environment overrides:"
+            echo "  PROD_SSH_HOST  Prod SSH host (default: app.buoy.fish)"
+            echo "  PROD_DB_NAME   Prod database name (default: buoy_mappers)"
             echo ""
             echo "What this script does:"
             echo "  1. Loads .env.development (PORT=$DEV_PORT)"
@@ -91,6 +102,79 @@ for arg in "$@"; do
             ;;
     esac
 done
+
+# Pull the production coverage DB into the local dev DB.
+# Dumps prod over SSH to a temp file, recreates the local DB, restores,
+# then runs migrations + the first_seen backfill so Timeline has real data.
+sync_db() {
+    # Overridable config with sensible defaults
+    local PROD_SSH_HOST="${PROD_SSH_HOST:-app.buoy.fish}"
+    local PROD_DB_NAME="${PROD_DB_NAME:-buoy_mappers}"
+
+    echo ""
+    echo "Syncing production coverage DB into local dev DB..."
+    echo "==========================================="
+    echo "   WARNING: the local database '$DB_NAME' will be DROPPED and"
+    echo "            replaced with a fresh copy of production data."
+    echo "   Source:  $PROD_SSH_HOST : $PROD_DB_NAME (via pg_dump over SSH)"
+    echo "   Target:  $DB_USER@$DB_HOST:$DB_PORT / $DB_NAME"
+    echo ""
+
+    # 1. Dump prod to a temp file (not a pipe, so a mid-stream failure
+    #    can't half-load the local DB).
+    local DUMP
+    DUMP="$(mktemp -t mappers_prod_dump.XXXXXX.sql)"
+    echo "   Dumping production database..."
+    if ! ssh -o ConnectTimeout=15 "$PROD_SSH_HOST" "pg_dump --no-owner --no-acl -d $PROD_DB_NAME" > "$DUMP"; then
+        echo "   ERROR: pg_dump over SSH failed."
+        echo "          Could not dump '$PROD_DB_NAME' from '$PROD_SSH_HOST'."
+        echo "          - Check SSH access:        ssh $PROD_SSH_HOST"
+        echo "          - Prod DB name may differ. Override with PROD_DB_NAME=..."
+        echo "          - Prod SSH host override:  PROD_SSH_HOST=..."
+        echo "          - Prod may use a different DB name or a DATABASE_URL."
+        rm -f "$DUMP"
+        exit 1
+    fi
+
+    # Guard against an empty dump (e.g. ssh succeeded but pg_dump wrote nothing)
+    if [ ! -s "$DUMP" ]; then
+        echo "   ERROR: the production dump is empty."
+        echo "          The pg_dump produced no output for '$PROD_DB_NAME' on '$PROD_SSH_HOST'."
+        echo "          - Prod DB name may differ. Override with PROD_DB_NAME=..."
+        echo "          - Prod SSH host override:  PROD_SSH_HOST=..."
+        echo "          - Prod may use a different DB name or a DATABASE_URL."
+        rm -f "$DUMP"
+        exit 1
+    fi
+    echo "   Dump complete ($(wc -c < "$DUMP" | tr -d ' ') bytes)."
+
+    # 2. Recreate the local DB. The prod dump recreates the PostGIS
+    #    extension + schema + data, so no manual CREATE EXTENSION needed.
+    echo "   Recreating local database '$DB_NAME'..."
+    PGPASSWORD="$DB_PASSWORD" dropdb --force --if-exists -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" "$DB_NAME"
+    PGPASSWORD="$DB_PASSWORD" createdb -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" "$DB_NAME"
+
+    # 3. Restore. psql does not stop on individual statement errors by
+    #    default, so harmless notices won't abort the restore.
+    echo "   Restoring dump into local database..."
+    PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -f "$DUMP"
+    rm -f "$DUMP"
+
+    # 4. Migrate — adds first_seen + any pending migrations not yet on prod.
+    echo "   Running migrations (adds first_seen + any pending)..."
+    mix ecto.migrate
+
+    # 5. Backfill first_seen from the synced uplinks (Timeline needs this).
+    echo "   Backfilling first_seen from synced uplinks..."
+    mix mappers.backfill_first_seen
+
+    # 6. Summary
+    echo ""
+    echo "   Sync complete. h3_res9 summary:"
+    PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t \
+        -c "SELECT 'hexes=' || count(*) || ', with first_seen=' || count(first_seen) FROM h3_res9;"
+    echo "==========================================="
+}
 
 # Handle restart mode — kill running processes first
 if [ "$RESTART_MODE" = true ]; then
@@ -179,6 +263,19 @@ else
         echo "   No Homebrew PostgreSQL found."
         echo "   Install with: brew install postgresql@17"
         echo "   Starting without database — map will render but data endpoints won't work."
+    fi
+fi
+
+# Sync production DB into local dev DB if requested. Runs before the normal
+# database setup so the synced + migrated + backfilled data feeds into a
+# regular server start (./scripts/dev.sh --sync-db = sync, then run localhost).
+if [ "$SYNC_DB" = true ]; then
+    if pg_isready -h "$DEV_DB_HOST" -p "$DEV_DB_PORT" -q 2>/dev/null; then
+        sync_db
+    else
+        echo ""
+        echo "ERROR: --sync-db requires a running local PostgreSQL on $DEV_DB_HOST:$DEV_DB_PORT."
+        exit 1
     fi
 fi
 
