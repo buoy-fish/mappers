@@ -3,6 +3,24 @@ defmodule Mappers.H3 do
   alias Mappers.H3.Res9
   use MappersWeb, :controller
 
+  # Derive the over-the-air first_seen instant from the ingesting uplink's
+  # epoch-ms timestamp. Matches Uplinks.create/1's first_timestamp derivation
+  # exactly. Defensive: reported_at can be nil (Ingest.parse_reported_at/1
+  # returns nil on bad input) and H3.create runs BEFORE Uplinks.create, so a
+  # nil here must not crash the pipeline.
+  defp first_seen_from(nil), do: nil
+
+  defp first_seen_from(reported_at) do
+    # Second-resolution instant, matching Uplinks.create/1's first_timestamp.
+    # The h3_res9.first_seen column is :utc_datetime_usec, and the existing-hex
+    # update path writes via a raw Ecto.Changeset.change/2 (no cast coercion),
+    # which rejects a bare second-precision DateTime. Normalize to microsecond
+    # precision so both the cast (new-hex) and raw-change (existing-hex) paths
+    # accept the value; the instant is unchanged.
+    dt = round(reported_at / 1000) |> DateTime.from_unix!()
+    %{dt | microsecond: {0, 6}}
+  end
+
   def create(message) do
     # grab lat/lng if available
     lat = message["decoded"]["payload"]["latitude"]
@@ -78,9 +96,21 @@ defmodule Mappers.H3 do
           res9_temp.snr
         end
 
+      # keep-MIN: lower first_seen only if an earlier uplink arrives. Mirrors
+      # the keep-MAX best_rssi logic above and stays correct under out-of-order
+      # / backfilled uplinks.
+      incoming_first_seen = first_seen_from(message["reported_at"])
+
+      first_seen =
+        cond do
+          is_nil(incoming_first_seen) -> res9_temp.first_seen
+          is_nil(res9_temp.first_seen) -> incoming_first_seen
+          DateTime.compare(incoming_first_seen, res9_temp.first_seen) == :lt -> incoming_first_seen
+          true -> res9_temp.first_seen
+        end
+
       res9_temp
-      |> Ecto.Changeset.change(%{best_rssi: best_rssi})
-      |> Ecto.Changeset.change(%{snr: snr})
+      |> Ecto.Changeset.change(%{best_rssi: best_rssi, snr: snr, first_seen: first_seen})
       |> Repo.update()
       |> case do
         {:ok, changeset} -> {:ok, changeset}
@@ -107,6 +137,7 @@ defmodule Mappers.H3 do
                 |> Map.put(:state, "mapped")
                 |> Map.put(:best_rssi, rssi)
                 |> Map.put(:snr, snr)
+                |> Map.put(:first_seen, first_seen_from(message["reported_at"]))
                 |> Map.put(:geom, %Geo.Polygon{
                   coordinates: [
                     [
@@ -137,6 +168,7 @@ defmodule Mappers.H3 do
                 |> Map.put(:state, "mapped")
                 |> Map.put(:best_rssi, rssi)
                 |> Map.put(:snr, snr)
+                |> Map.put(:first_seen, first_seen_from(message["reported_at"]))
                 |> Map.put(:geom, %Geo.Polygon{
                   coordinates: [
                     [
@@ -168,6 +200,7 @@ defmodule Mappers.H3 do
                 |> Map.put(:state, "mapped")
                 |> Map.put(:best_rssi, rssi)
                 |> Map.put(:snr, snr)
+                |> Map.put(:first_seen, first_seen_from(message["reported_at"]))
                 |> Map.put(:geom, %Geo.Polygon{
                   coordinates: [
                     [
@@ -200,6 +233,7 @@ defmodule Mappers.H3 do
                 |> Map.put(:state, "mapped")
                 |> Map.put(:best_rssi, rssi)
                 |> Map.put(:snr, snr)
+                |> Map.put(:first_seen, first_seen_from(message["reported_at"]))
                 |> Map.put(:geom, %Geo.Polygon{
                   coordinates: [
                     [
@@ -233,6 +267,7 @@ defmodule Mappers.H3 do
                 |> Map.put(:state, "mapped")
                 |> Map.put(:best_rssi, rssi)
                 |> Map.put(:snr, snr)
+                |> Map.put(:first_seen, first_seen_from(message["reported_at"]))
                 |> Map.put(:geom, %Geo.Polygon{
                   coordinates: [
                     [
@@ -267,6 +302,7 @@ defmodule Mappers.H3 do
                 |> Map.put(:state, "mapped")
                 |> Map.put(:best_rssi, rssi)
                 |> Map.put(:snr, snr)
+                |> Map.put(:first_seen, first_seen_from(message["reported_at"]))
                 |> Map.put(:geom, %Geo.Polygon{
                   coordinates: [
                     [
