@@ -97,6 +97,30 @@ function applySatelliteTreatment(map, treatment) {
     });
 }
 
+// CartoCDN dark-matter is a vector basemap (OpenMapTiles schema) that draws
+// roads and highways. The Buoy.Fish map only cares about the land/water
+// divide, so hide every road layer. Roads live in the `transportation` and
+// `transportation_name` (highway shields) source-layers; we also match any
+// layer whose id mentions roads/highways as a fallback in case Carto renames
+// things. Place/coastline/water layers are untouched.
+function hideRoadLayers(map) {
+    const layers = map.getStyle()?.layers || [];
+    layers.forEach((layer) => {
+        const srcLayer = layer["source-layer"] || "";
+        const id = layer.id || "";
+        const isRoad =
+            srcLayer === "transportation" ||
+            srcLayer === "transportation_name" ||
+            /road|highway|motorway|trunk|bridge|tunnel|street/i.test(id);
+        if (!isRoad) return;
+        try {
+            map.setLayoutProperty(layer.id, "visibility", "none");
+        } catch (_) {
+            // Layer may not exist in every style variant; ignore.
+        }
+    });
+}
+
 var selectedStateIdTile = null;
 var selectedStateIdChannel = null;
 const channel = socket.channel("h3:new")
@@ -133,6 +157,9 @@ function Map(props) {
         m.on('style.load', () => {
             if (USE_MAPBOX) {
                 applySatelliteTreatment(m, darkSatelliteRef.current ? SATELLITE_DARK_TREATMENT : SATELLITE_LIGHT_TREATMENT);
+            } else {
+                // CARTO vector basemap: strip distracting roadways.
+                hideRoadLayers(m);
             }
         });
     }, []);
