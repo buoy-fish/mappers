@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#121216;
+    --bg2:#17171d;
+    --o-hi:#FF9800;   /* bright RSSI */
+    --o-mid:#F57C00;
+    --o-lo:#E65100;
+    --ink:#ffffff;
+    --muted:rgba(255,255,255,.58);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:1200px;height:630px;overflow:hidden}
+  body{
+    position:relative;
+    background:
+      radial-gradient(680px 680px at 880px 300px, rgba(255,152,0,.16), rgba(255,152,0,0) 62%),
+      radial-gradient(1200px 700px at 70% 50%, #1b1b22 0%, var(--bg) 55%),
+      var(--bg);
+    font-family:'Archivo',system-ui,sans-serif;
+    color:var(--ink);
+  }
+  /* faint hex-mesh texture across the whole card */
+  .mesh{position:absolute;inset:0;opacity:.05}
+  /* grain */
+  .grain{position:absolute;inset:0;opacity:.06;mix-blend-mode:overlay;pointer-events:none}
+  /* left accent bar */
+  .bar{position:absolute;left:0;top:0;bottom:0;width:10px;
+    background:linear-gradient(180deg,var(--o-hi),var(--o-lo))}
+
+  .bloom{position:absolute;right:-70px;top:50%;transform:translateY(-50%);
+    width:720px;height:720px;filter:drop-shadow(0 0 40px rgba(255,152,0,.18))}
+
+  .content{position:absolute;left:96px;top:0;bottom:0;width:660px;
+    display:flex;flex-direction:column;justify-content:center;gap:26px;z-index:3}
+
+  .eyebrow{display:flex;align-items:center;gap:12px;
+    font-family:'JetBrains Mono',monospace;font-weight:700;font-size:21px;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--o-hi)}
+  .eyebrow .dot{width:13px;height:13px;border-radius:50%;background:var(--o-hi);
+    box-shadow:0 0 0 5px rgba(255,152,0,.22),0 0 18px rgba(255,152,0,.9)}
+  .eyebrow .sep{color:rgba(255,255,255,.3)}
+  .eyebrow .url{color:rgba(255,255,255,.82);letter-spacing:.06em}
+
+  h1{font-weight:900;font-size:104px;line-height:.92;letter-spacing:-.025em}
+  h1 .orange{color:var(--o-hi)}
+  h1 .white{color:var(--ink)}
+
+  .tag{font-family:'JetBrains Mono',monospace;font-weight:500;
+    font-size:27px;color:var(--muted);letter-spacing:.01em}
+
+  .legend{display:flex;align-items:center;gap:14px;margin-top:6px}
+  .legend .ramp{width:230px;height:14px;border-radius:8px;
+    background:linear-gradient(90deg,rgba(230,81,0,.55),var(--o-mid),var(--o-hi));
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+  .legend .lab{font-family:'JetBrains Mono',monospace;font-weight:500;
+    font-size:16px;color:rgba(255,255,255,.5);letter-spacing:.06em}
+</style>
+</head>
+<body>
+  <svg class="mesh" id="mesh" xmlns="http://www.w3.org/2000/svg"></svg>
+  <div class="bar"></div>
+  <svg class="bloom" id="bloom" viewBox="-360 -360 720 720" xmlns="http://www.w3.org/2000/svg"></svg>
+
+  <div class="content">
+    <div class="eyebrow"><span class="dot"></span><span class="url">map.buoy.fish</span></div>
+    <h1><span class="orange">Buoy.Fish</span><br><span class="white">Coverage Map</span></h1>
+    <div class="tag">LoRaWAN coverage, mapped.</div>
+    <div class="legend">
+      <span class="lab">-120</span>
+      <span class="ramp"></span>
+      <span class="lab">-80 dBm</span>
+    </div>
+  </div>
+
+  <svg class="grain" xmlns="http://www.w3.org/2000/svg"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2"/></filter><rect width="100%" height="100%" filter="url(#n)"/></svg>
+
+<script>
+  // Flat-top hexagon honeycomb "coverage bloom" radiating from a device point.
+  // Inner rings bright (strong RSSI), outer rings dim — mirrors the live map's
+  // RSSI-colored hexes, with a patchy organic edge.
+  function hexPts(cx, cy, R){
+    let p = [];
+    for(let i=0;i<6;i++){const a=Math.PI/180*(60*i);p.push((cx+R*Math.cos(a)).toFixed(2)+','+(cy+R*Math.sin(a)).toFixed(2));}
+    return p.join(' ');
+  }
+  function ringColor(ring){
+    if(ring<=1) return ['#FF9800',0.96];
+    if(ring===2) return ['#FB8C00',0.85];
+    if(ring===3) return ['#F57C00',0.66];
+    if(ring===4) return ['#EF6C00',0.46];
+    return ['#E65100',0.26];
+  }
+  function buildBloom(){
+    const svg=document.getElementById('bloom');
+    const R=40, GAP=0.88, N=5;
+    // deterministic pseudo-random so the patchy edge is stable across renders
+    let seed=7; const rnd=()=>{seed=(seed*1103515245+12345)&0x7fffffff;return seed/0x7fffffff;};
+    const cells=[];
+    for(let q=-N;q<=N;q++){
+      for(let r=-N;r<=N;r++){
+        const ring=(Math.abs(q)+Math.abs(q+r)+Math.abs(r))/2;
+        if(ring>N) continue;
+        // drop some outer cells for an organic coverage edge
+        if(ring>=4 && rnd() < (ring-3)*0.34) continue;
+        const x=R*1.5*q;
+        const y=R*Math.sqrt(3)*(r+q/2);
+        cells.push({x,y,ring});
+      }
+    }
+    cells.sort((a,b)=>a.ring-b.ring);
+    for(const c of cells){
+      const [fill,op]=ringColor(c.ring);
+      const poly=document.createElementNS('http://www.w3.org/2000/svg','polygon');
+      poly.setAttribute('points',hexPts(c.x,c.y,R*GAP));
+      poly.setAttribute('fill',fill);
+      poly.setAttribute('fill-opacity',op);
+      poly.setAttribute('stroke','rgba(0,0,0,.35)');
+      poly.setAttribute('stroke-width','1.5');
+      svg.appendChild(poly);
+    }
+    // device origin point
+    const glow=document.createElementNS('http://www.w3.org/2000/svg','circle');
+    glow.setAttribute('cx',0);glow.setAttribute('cy',0);glow.setAttribute('r',16);
+    glow.setAttribute('fill','#fff');glow.setAttribute('fill-opacity','.95');
+    const ring=document.createElementNS('http://www.w3.org/2000/svg','circle');
+    ring.setAttribute('cx',0);ring.setAttribute('cy',0);ring.setAttribute('r',26);
+    ring.setAttribute('fill','none');ring.setAttribute('stroke','#fff');
+    ring.setAttribute('stroke-opacity','.55');ring.setAttribute('stroke-width','3');
+    svg.appendChild(ring);svg.appendChild(glow);
+  }
+  // faint full-card hex mesh
+  function buildMesh(){
+    const svg=document.getElementById('mesh');
+    svg.setAttribute('viewBox','0 0 1200 630');
+    const R=34;
+    for(let q=-1;q<40;q++){
+      for(let r=-1;r<26;r++){
+        const x=R*1.5*q, y=R*Math.sqrt(3)*(r+q/2);
+        if(x<-50||x>1250||y<-50||y>680) continue;
+        const poly=document.createElementNS('http://www.w3.org/2000/svg','polygon');
+        poly.setAttribute('points',hexPts(x,y,R*0.96));
+        poly.setAttribute('fill','none');
+        poly.setAttribute('stroke','#ffffff');
+        poly.setAttribute('stroke-width','1');
+        svg.appendChild(poly);
+      }
+    }
+  }
+  buildMesh();
+  buildBloom();
+  window.__ready=true;
+</script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:512px;height:512px;overflow:hidden}
+body{background:radial-gradient(360px 360px at 50% 44%, #1d1d24, #121216);}
+#i{width:512px;height:512px}
+</style></head><body>
+<svg id="i" viewBox="-256 -256 512 512" xmlns="http://www.w3.org/2000/svg"></svg>
+<script>
+function hexPts(cx,cy,R){let p=[];for(let i=0;i<6;i++){const a=Math.PI/180*(60*i);p.push((cx+R*Math.cos(a)).toFixed(2)+','+(cy+R*Math.sin(a)).toFixed(2));}return p.join(' ');}
+const svg=document.getElementById('i');
+const R=120, GAP=0.9;
+// 7-hex flower: center bright, ring dimmer — the coverage-bloom mark.
+const cells=[{q:0,r:0,c:'#FF9800',o:0.98},
+ {q:1,r:-1},{q:1,r:0},{q:0,r:1},{q:-1,r:1},{q:-1,r:0},{q:0,r:-1}];
+cells.forEach((c,idx)=>{
+  const x=R*1.5*c.q, y=R*Math.sqrt(3)*(c.r+c.q/2);
+  const fill=c.c||'#F57C00', op=c.o||0.82;
+  const poly=document.createElementNS('http://www.w3.org/2000/svg','polygon');
+  poly.setAttribute('points',hexPts(x,y,R*GAP));
+  poly.setAttribute('fill',fill);poly.setAttribute('fill-opacity',op);
+  poly.setAttribute('stroke','rgba(0,0,0,.4)');poly.setAttribute('stroke-width','5');
+  svg.appendChild(poly);
+});
+const dot=document.createElementNS('http://www.w3.org/2000/svg','circle');
+dot.setAttribute('cx',0);dot.setAttribute('cy',0);dot.setAttribute('r',38);
+dot.setAttribute('fill','#fff');svg.appendChild(dot);
+window.__ready=true;
+</script></body></html>
