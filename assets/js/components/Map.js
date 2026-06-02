@@ -16,6 +16,8 @@ import WelcomeModal from "../components/WelcomeModal"
 import TimelineControl, { startOfLocalDay, endOfLocalDay } from "../components/TimelineControl"
 import { uplinkTileServerLayer, uplinkHotspotsLineLayer, uplinkRelayLineLayer, uplinkHotspotsCircleLayer, uplinkHotspotsHexLayer, uplinkChannelLayer, gatewayMarkerLayer, gatewayLabelLayer, selectedHexLayer, timelineRevealLayer, timelineBaselineLayer } from './Layers.js';
 import { get } from '../data/Rest'
+import { getInitialProjects, fetchProjects } from '../utils/projects'
+import { parseTimelineLink, buildTimelineLink } from '../utils/timelineLink'
 import { geoToH3, h3ToGeo, h3ToGeoBoundary } from "h3-js";
 import socket from "../socket";
 import geojson2h3 from 'geojson2h3';
@@ -249,6 +251,16 @@ function Map(props) {
     const [playing, setPlaying] = useState(false);
     const [speed, setSpeed] = useState(1);
     const [showBaseline, setShowBaseline] = useState(false);
+    // Continuous loop: when on, the bloom restarts from rangeStart on reaching
+    // the end instead of the default one-shot stop. Drives shareable "always
+    // playing" deep-links.
+    const [loop, setLoop] = useState(false);
+    // The project code currently framed by the timeline, set on launch. Lets the
+    // Copy-link button serialize a deep-link back to this exact view.
+    const [activeTimelineProjectCode, setActiveTimelineProjectCode] = useState(null);
+    // Scrubber expanded/minimized state — LIFTED from TimelineControl so it can
+    // be both set from the `open` deep-link param and read into the share URL.
+    const [timelineExpanded, setTimelineExpanded] = useState(false);
 
     // Time domain of the loaded timeline data: [minT, maxT] over first_seen.
     // Memoized so handle/playhead math has a stable domain. When there are no
@@ -292,10 +304,15 @@ function Map(props) {
     const rangeEndRef = useRef(rangeEnd);
     const speedRef = useRef(speed);
     const cursorRef = useRef(cursor);
+    // loopRef mirrors `loop` so the rAF tick reads the live value without
+    // re-subscribing (toggling loop mid-sweep takes effect on the next wrap).
+    // Declared AFTER the `loop` state to dodge the minifier TDZ gotcha.
+    const loopRef = useRef(loop);
     React.useEffect(() => { rangeStartRef.current = rangeStart; }, [rangeStart]);
     React.useEffect(() => { rangeEndRef.current = rangeEnd; }, [rangeEnd]);
     React.useEffect(() => { speedRef.current = speed; }, [speed]);
     React.useEffect(() => { cursorRef.current = cursor; }, [cursor]);
+    React.useEffect(() => { loopRef.current = loop; }, [loop]);
 
     const stopRaf = useCallback(() => {
         if (rafRef.current != null) {
@@ -325,6 +342,16 @@ function Map(props) {
             const advance = span * (dtMs / sweepDuration);
             let next = cursorRef.current + advance;
             if (next >= rangeEndRef.current) {
+                if (loopRef.current) {
+                    // Loop mode: wrap back to the range start and keep sweeping,
+                    // so shared "always playing" links cycle forever. Read via
+                    // loopRef so toggling loop mid-sweep takes effect here.
+                    next = rangeStartRef.current;
+                    cursorRef.current = next;
+                    setCursor(next);
+                    rafRef.current = requestAnimationFrame(tick);
+                    return;
+                }
                 // One-shot: clamp to the end ("current coverage"), stop, and do
                 // NOT schedule another frame. The bloom plays once and rests at
                 // present-day coverage. Use ▶ / Play again to replay.
@@ -417,6 +444,12 @@ function Map(props) {
 
     let navigate = useNavigate();
     const location = useLocation();
+
+    // True when the URL is a timeline deep-link (?play=...). Captured at mount
+    // (empty deps) and used, like isHexDeepLink, to suppress the first-time
+    // WelcomeModal — a shared "click to play" link wants the animation, not the
+    // intro placard.
+    const isTimelineDeepLink = React.useMemo(() => !!parseTimelineLink(location.search), []); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Load hex data from Phoenix API (replaces Martin tile server)
     React.useEffect(() => {
@@ -822,27 +855,87 @@ function Map(props) {
         }));
     }, []);
 
-    // Run the (global) Timeline framed on a project's region: fly there, then
-    // enter Timeline mode. No data scoping — the timeline stays global; we only
-    // frame the view on the project.
-    const onRunProjectTimeline = useCallback((project) => {
-        // Fly to the project's framed view.
+    // Core Timeline launcher: fly to the project's framed view, enter Timeline
+    // mode, and queue the deterministic bloom over [start, end]. All knobs are
+    // explicit so both the InfoPane project launch (config defaults) and a
+    // shareable deep-link (URL-derived values) funnel through one path and reuse
+    // the existing pendingPlay → data-loaded → auto-play machinery.
+    const launchTimeline = useCallback(({ project, start, end, speed, baseline, loop, open }) => {
         setViewState(prev => ({ ...prev, latitude: project.lat, longitude: project.lng, zoom: project.zoom || 12 }));
         setTimelineMode(true);
         // Start BLANK so the bloom begins on an empty map (no full→blank flash).
         setRangeStart(0); setRangeEnd(0); setCursor(0); setPlaying(false);
-        // Deterministic window: per-project start (or today−60d fallback),
-        // sweeping to TODAY ("current coverage").
+        setActiveTimelineProjectCode(project.code);
+        setSpeed(speed || 1);
+        setShowBaseline(!!baseline);
+        setLoop(!!loop);
+        setTimelineExpanded(!!open);
+        setPendingPlay({ start, end });
+    }, []);
+
+    // Run the (global) Timeline framed on a project's region (InfoPane ▶ button).
+    // No data scoping — the timeline stays global; we only frame the view. Uses
+    // the per-project config for start/speed and the non-deep-link defaults
+    // (baseline/loop off, scrubber minimized).
+    const onRunProjectTimeline = useCallback((project) => {
         const cfg = TIMELINE_PROJECT_CONFIG[project.code] || {};
         const start = cfg.start
             ? startOfLocalDay(parseLocalDate(cfg.start))
             : startOfLocalDay(Date.now() - FALLBACK_LOOKBACK_DAYS * DAY_MS);
         const end = endOfLocalDay(Date.now());
-        // Apply the project's default sweep speed (falls back to 1×). The user can
-        // still change it via the expanded scrubber's speed buttons.
-        setSpeed(cfg.speed || 1);
-        setPendingPlay({ start, end });
-    }, []);
+        launchTimeline({ project, start, end, speed: cfg.speed || 1, baseline: false, loop: false, open: false });
+    }, [launchTimeline]);
+
+    // Shareable deep-link: on mount, if the URL carries ?play=<project-code>,
+    // resolve the project and launch the timeline with URL-derived values
+    // (URL overrides per-project config which overrides hardcoded defaults).
+    // Runs ONCE — `location.search` is intentionally NOT a dependency so later
+    // in-app navigations don't relaunch. Resolves the slug via the same projects
+    // util InfoPane uses (cache-first, then a one-shot live fetch).
+    React.useEffect(() => {
+        const intent = parseTimelineLink(location.search);
+        if (!intent) return;
+        const launchFrom = (project) => {
+            if (!project) { console.warn('timeline deep-link: unknown project', intent.play); return; }
+            const cfg = TIMELINE_PROJECT_CONFIG[project.code] || {};
+            const cfgStart = cfg.start
+                ? startOfLocalDay(parseLocalDate(cfg.start))
+                : startOfLocalDay(Date.now() - FALLBACK_LOOKBACK_DAYS * DAY_MS);
+            const cfgEnd = endOfLocalDay(Date.now());
+            let start = intent.start != null ? startOfLocalDay(intent.start) : cfgStart;
+            let end = intent.end != null ? endOfLocalDay(intent.end) : cfgEnd;
+            if (end <= start) {
+                console.warn('timeline deep-link: end<=start, falling back to config window');
+                start = cfgStart; end = cfgEnd;
+            }
+            const speed = intent.speed != null ? intent.speed : (cfg.speed || 1);
+            launchTimeline({ project, start, end, speed, baseline: intent.baseline, loop: intent.loop, open: intent.open });
+        };
+        const resolve = (list) => (list || []).find(p => p.code === intent.play) || null;
+        // getInitialProjects() is synchronous (cache/fallback, never null) — the
+        // common case launches immediately.
+        const synced = resolve(getInitialProjects());
+        if (synced) { launchFrom(synced); return; }
+        // Cold cache for a non-fallback project: try the live list once.
+        let cancelled = false;
+        fetchProjects().then(list => {
+            if (cancelled) return;
+            if (!list) { console.warn('timeline deep-link: project list unavailable for', intent.play); return; }
+            launchFrom(resolve(list));
+        });
+        return () => { cancelled = true; };
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps -- run once on mount
+
+    // Absolute shareable URL reflecting the current timeline state, fed to the
+    // Copy-link button. Null until a timeline has been launched (no active
+    // project to name).
+    const shareUrl = React.useMemo(() => {
+        if (!activeTimelineProjectCode) return null;
+        return buildTimelineLink({
+            projectCode: activeTimelineProjectCode,
+            rangeStart, rangeEnd, speed, baseline: showBaseline, loop, open: timelineExpanded,
+        });
+    }, [activeTimelineProjectCode, rangeStart, rangeEnd, speed, showBaseline, loop, timelineExpanded]);
 
     // Replay the current range from its start (used by the ↻ button in the
     // minimized control). Re-arms playing; the play effect's "if cursor>=end,
@@ -966,9 +1059,14 @@ function Map(props) {
                     onToggleBaseline={onToggleBaseline}
                     onPlayAgain={onPlayAgain}
                     onExit={() => setTimelineMode(false)}
+                    loop={loop}
+                    onToggleLoop={() => setLoop(l => !l)}
+                    expanded={timelineExpanded}
+                    onToggleExpanded={() => setTimelineExpanded(e => !e)}
+                    shareUrl={shareUrl}
                 />
             }
-            <WelcomeModal showWelcomeModal={showWelcomeModal && !isHexDeepLink} onCloseWelcomeModalClick={onCloseWelcomeModalClick} />
+            <WelcomeModal showWelcomeModal={showWelcomeModal && !isHexDeepLink && !isTimelineDeepLink} onCloseWelcomeModalClick={onCloseWelcomeModalClick} />
         </div>
     );
 }
