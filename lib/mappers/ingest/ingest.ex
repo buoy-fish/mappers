@@ -55,26 +55,23 @@ defmodule Mappers.Ingest do
                   {:ok, uplink} ->
                     uplink_id = uplink.id
 
-                    # create uplinks heard
-                    UplinksHeard.create(hotspots, uplink_id)
+                    # create uplinks heard. create/2 always returns {:ok, _}:
+                    # partial insert failures are logged, not propagated (so a
+                    # single bad hotspot never sinks the whole uplink/hex).
+                    {:ok, uplinks_heard} = UplinksHeard.create(hotspots, uplink_id)
+
+                    # create h3/uplink link
+                    Links.create(h3_res9_id, uplink_id)
                     |> case do
                       {:error, reason} ->
                         %{error: reason}
 
-                      {:ok, uplinks_heard} ->
-                        # create h3/uplink link
-                        Links.create(h3_res9_id, uplink_id)
-                        |> case do
-                          {:error, reason} ->
-                            %{error: reason}
-
-                          {:ok, _} ->
-                            %IngestUplinkResponse{
-                              uplink: uplink,
-                              hotspots: uplinks_heard,
-                              status: "success"
-                            }
-                        end
+                      {:ok, _} ->
+                        %IngestUplinkResponse{
+                          uplink: uplink,
+                          hotspots: uplinks_heard,
+                          status: "success"
+                        }
                     end
                 end
             end
