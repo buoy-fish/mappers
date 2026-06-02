@@ -15,15 +15,22 @@ import { useRef, useCallback, useState } from 'react';
 // two timeline Layers' filters stay declarative props driven by rangeStart /
 // cursor. This component is the presentation + interaction layer only.
 //
-// Track domain mapping (commented at each use site):
-//   - The two range HANDLES map over the full data domain [minT, maxT]: a
-//     handle's pixel x = ((handleT - minT) / (maxT - minT)) * trackWidth.
-//   - The PLAYHEAD maps over the selected range [rangeStart, rangeEnd] for its
-//     own travel, but we draw it on the SAME track as the handles (full domain)
-//     so the visual stays consistent — playhead pixel x uses the [minT,maxT]
-//     mapping too. Scrubbing (click/drag on the track) converts pixel -> time
-//     in [minT,maxT] then CLAMPS into [rangeStart, rangeEnd] (the cursor can
-//     only live inside the selected range).
+// Track domain mapping:
+//   - The track maps over the SELECTED WINDOW [rangeStart, rangeEnd] (NOT the
+//     data domain [minT, maxT]). The window IS the scrubber: the start handle
+//     sits at 0%, the end handle at 100%, and the playhead/cursor sweeps the
+//     full 0–100% as it advances rangeStart -> rangeEnd. This keeps the bar
+//     correctly framed regardless of how sparse or far-flung the underlying
+//     data domain is. (The old data-domain mapping pushed elements to large
+//     NEGATIVE left% — off the left edge of the screen — whenever rangeStart
+//     sat well before a tiny/degenerate data domain, e.g. before the prod
+//     first_seen backfill ran.)
+//   - Every rendered percentage is CLAMPED to [0, 100] (see tToPct) so a stale
+//     or degenerate window can never push an element outside the track.
+//   - Dragging a handle narrows the window from that side (it can't cross the
+//     other handle); dragging/clicking the track moves the cursor within the
+//     window. minT/maxT are still received (they gate whether the control
+//     renders, in Map.js) but no longer drive layout.
 // ============================================================================
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -104,15 +111,21 @@ function TimelineControl(props) {
     // Which thing is being dragged: 'start' | 'end' | 'playhead' | null.
     const dragRef = useRef(null);
 
-    // Track domain is day-snapped so whole-day-snapped handles map exactly to 0%-100%.
-    const domainMin = startOfLocalDay(minT);
-    const domainMax = endOfLocalDay(maxT);
+    // Track domain = the SELECTED WINDOW [rangeStart, rangeEnd], day-snapped.
+    // rangeStart/rangeEnd are already local-day-snapped upstream, so the start
+    // handle lands exactly at 0% and the end handle at 100%.
+    const domainMin = startOfLocalDay(rangeStart);
+    const domainMax = endOfLocalDay(rangeEnd);
     const domainSpan = Math.max(1, domainMax - domainMin); // guard divide-by-zero
 
-    // time -> fraction [0,1] across the full data domain.
-    const tToFrac = useCallback((t) => (t - domainMin) / domainSpan, [domainMin, domainSpan]);
+    // time -> percent [0,100] across the window, CLAMPED so a stale/degenerate
+    // window can never produce an off-track (negative or >100%) position.
+    const tToPct = useCallback(
+        (t) => Math.min(100, Math.max(0, ((t - domainMin) / domainSpan) * 100)),
+        [domainMin, domainSpan]
+    );
 
-    // A clientX pixel -> epoch-ms over the full data domain [domainMin, domainMax].
+    // A clientX pixel -> epoch-ms over the window [domainMin, domainMax].
     const pxToTime = useCallback((clientX) => {
         const el = trackRef.current;
         if (!el) return domainMin;
@@ -127,15 +140,14 @@ function TimelineControl(props) {
         if (!mode) return;
         const t = pxToTime(e.clientX);
         if (mode === 'start') {
-            // Snap to local midnight; constrain to [minT, rangeEnd].
+            // Snap to local midnight. pxToTime already clamps into the window,
+            // so the only extra guard is "don't cross the end handle".
             let v = startOfLocalDay(t);
-            if (v < startOfLocalDay(minT)) v = startOfLocalDay(minT);
             if (v > rangeEnd) v = startOfLocalDay(rangeEnd);
             onSetRangeStart(v);
         } else if (mode === 'end') {
-            // Snap to local end-of-day; constrain to [rangeStart, maxT].
+            // Snap to local end-of-day; don't cross the start handle.
             let v = endOfLocalDay(t);
-            if (v > endOfLocalDay(maxT)) v = endOfLocalDay(maxT);
             if (v < rangeStart) v = endOfLocalDay(rangeStart);
             onSetRangeEnd(v);
         } else if (mode === 'playhead') {
@@ -143,7 +155,7 @@ function TimelineControl(props) {
             let v = Math.min(rangeEnd, Math.max(rangeStart, t));
             onSetCursor(v);
         }
-    }, [pxToTime, minT, maxT, rangeStart, rangeEnd, onSetRangeStart, onSetRangeEnd, onSetCursor]);
+    }, [pxToTime, rangeStart, rangeEnd, onSetRangeStart, onSetRangeEnd, onSetCursor]);
 
     const endDrag = useCallback(() => {
         dragRef.current = null;
@@ -170,9 +182,11 @@ function TimelineControl(props) {
         onSetCursor(v);
     }, [pxToTime, rangeStart, rangeEnd, playing, onTogglePlay, onSetCursor]);
 
-    const startPct = tToFrac(rangeStart) * 100;
-    const endPct = tToFrac(rangeEnd) * 100;
-    const cursorPct = tToFrac(cursor) * 100;
+    // With the window-as-domain mapping these resolve to startPct≈0, endPct≈100,
+    // and cursorPct sweeping 0→100; tToPct clamps each to [0,100] regardless.
+    const startPct = tToPct(rangeStart);
+    const endPct = tToPct(rangeEnd);
+    const cursorPct = tToPct(cursor);
     const rangeWidthPct = Math.max(0, endPct - startPct);
 
     // The clock / replay / close frosted-glass FAB cluster. Shared between the
