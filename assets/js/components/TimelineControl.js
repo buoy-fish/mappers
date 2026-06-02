@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useState } from 'react';
 
 // ============================================================================
 // TimelineControl — scrub-and-play widget for the coverage Timeline feature.
@@ -58,8 +58,14 @@ function TimelineControl(props) {
         inRangeCount,
         onSetRangeStart, onSetRangeEnd,
         onSetCursor, onTogglePlay, onSetSpeed, onToggleBaseline,
+        onPlayAgain,
         onExit,
     } = props;
+
+    // The bar starts MINIMIZED: just the ⏳ / ↻ / ✕ icon cluster. The hourglass
+    // toggles the full scrubber open. This keeps the auto-played bloom
+    // unobstructed by default; the full controls are one click away.
+    const [expanded, setExpanded] = useState(false);
 
     const trackRef = useRef(null);
     // Which thing is being dragged: 'start' | 'end' | 'playhead' | null.
@@ -136,6 +142,46 @@ function TimelineControl(props) {
     const cursorPct = tToFrac(cursor) * 100;
     const rangeWidthPct = Math.max(0, endPct - startPct);
 
+    // The hourglass / play-again / exit icon cluster. Shared between the
+    // minimized and expanded views. In the minimized view the ⏳ opens the bar;
+    // in the expanded view it collapses it again.
+    const iconCluster = (
+        <div className="timeline-icon-cluster">
+            <button
+                className={'timeline-icon-btn' + (expanded ? ' active' : '')}
+                onClick={() => setExpanded(e => !e)}
+                aria-label={expanded ? 'Hide timeline scrubber' : 'Show timeline scrubber'}
+                aria-expanded={expanded}
+                title={expanded ? 'Hide timeline scrubber' : 'Show timeline scrubber'}
+            >⏳</button>
+            <button
+                className="timeline-icon-btn"
+                onClick={onPlayAgain}
+                aria-label="Play again"
+                title="Play again"
+            >↻</button>
+            <button
+                className="timeline-icon-btn timeline-exit"
+                onClick={onExit}
+                aria-label="Exit timeline"
+                title="Exit timeline"
+            >✕</button>
+        </div>
+    );
+
+    // Minimized view: compact icon cluster only, plus the empty-state caption
+    // when there's no new coverage in the current range.
+    if (!expanded) {
+        return (
+            <div className="timeline-control timeline-control-mini">
+                {iconCluster}
+                {inRangeCount === 0 &&
+                    <span className="timeline-empty-caption">No new coverage in this range</span>
+                }
+            </div>
+        );
+    }
+
     return (
         <div className="timeline-control">
             <div className="timeline-control-row">
@@ -197,13 +243,10 @@ function TimelineControl(props) {
                     ))}
                 </div>
 
-                {/* Exit Timeline mode (replaces the old standalone nav toggle). */}
-                <button
-                    className="timeline-exit"
-                    onClick={onExit}
-                    aria-label="Exit timeline"
-                    title="Exit timeline"
-                >✕</button>
+                {/* Collapse (⏳) / play-again (↻) / exit (✕) cluster. The
+                    hourglass here acts as a collapse toggle back to the
+                    minimized view. */}
+                {iconCluster}
             </div>
 
             <div className="timeline-control-row timeline-control-row-secondary">
