@@ -991,6 +991,7 @@ function Map(props) {
                     speed={speed}
                     showBaseline={showBaseline}
                     inRangeCount={inRangeCount}
+                    autoPlayPending={autoPlayPending}
                     onSetRangeStart={onSetRangeStart}
                     onSetRangeEnd={onSetRangeEnd}
                     onSetCursor={onSetCursor}

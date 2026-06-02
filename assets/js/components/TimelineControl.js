@@ -88,6 +88,7 @@ function TimelineControl(props) {
         rangeStart, rangeEnd, cursor,
         playing, speed, showBaseline,
         inRangeCount,
+        autoPlayPending,
         onSetRangeStart, onSetRangeEnd,
         onSetCursor, onTogglePlay, onSetSpeed, onToggleBaseline,
         onPlayAgain,
@@ -210,7 +211,7 @@ function TimelineControl(props) {
         return (
             <div className="timeline-control timeline-control-mini">
                 {fabCluster}
-                {inRangeCount === 0 &&
+                {inRangeCount === 0 && !autoPlayPending &&
                     <span className="timeline-empty-caption">No new coverage in this range</span>
                 }
             </div>
@@ -297,7 +298,7 @@ function TimelineControl(props) {
                     </button>
                     <span>Show baseline</span>
                 </label>
-                {inRangeCount === 0 &&
+                {inRangeCount === 0 && !autoPlayPending &&
                     <span className="timeline-empty-caption">No new coverage in this range</span>
                 }
             </div>
