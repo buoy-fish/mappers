@@ -126,6 +126,18 @@ var selectedStateIdTile = null;
 var selectedStateIdChannel = null;
 const channel = socket.channel("h3:new")
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// The local-midnight instant one calendar day BEFORE t. DST-safe: we snap t to
+// the start of its local day, then step the Date's calendar day back by one
+// (setDate handles month/year rollover and the 23/25-hour DST days correctly,
+// which a naive `t - DAY_MS` would not).
+function dayBefore(t) {
+    const d = new Date(startOfLocalDay(t));
+    d.setDate(d.getDate() - 1);
+    return d.getTime();
+}
+
 function Map(props) {
     // `startZoom` is supplied by MapScreen.js from the admin-editable
     // map.buoy.fish default view (fetched from app.buoy.fish on page load,
@@ -199,6 +211,10 @@ function Map(props) {
     // state it mirrors, to dodge the minifier TDZ gotcha).
     const [timelineMode, setTimelineMode] = useState(false);
     const [timelineGeoJson, setTimelineGeoJson] = useState(emptyFC);
+    // When a project ▶ Timeline launch is in flight: set true alongside the fly
+    // + setTimelineMode(true), consumed by the auto-play effect below once the
+    // timeline data has loaded (so the bloom starts from a viewport-aware date).
+    const [autoPlayPending, setAutoPlayPending] = useState(false);
     const timelineModeRef = useRef(false);
     React.useEffect(() => { timelineModeRef.current = timelineMode; }, [timelineMode]);
 
@@ -265,7 +281,8 @@ function Map(props) {
 
     // Animation loop. rAF with a timestamp delta (no 60fps assumption). A full
     // sweep of the selected range takes TIMELINE_SWEEP_MS / speed; on reaching
-    // rangeEnd we LOOP back to rangeStart (loop is always-on). Refs mirror the
+    // rangeEnd we STOP (one-shot — the bloom plays once to current coverage and
+    // rests there; replay via ▶ / Play again). Refs mirror the
     // state the loop needs so the rAF closure (created once per play) reads
     // live values without re-subscribing each frame. Declared AFTER the state
     // they mirror to dodge the minifier TDZ gotcha.
@@ -308,8 +325,14 @@ function Map(props) {
             const advance = span * (dtMs / sweepDuration);
             let next = cursorRef.current + advance;
             if (next >= rangeEndRef.current) {
-                // Loop: wrap back to the start and keep going.
-                next = rangeStartRef.current;
+                // One-shot: clamp to the end ("current coverage"), stop, and do
+                // NOT schedule another frame. The bloom plays once and rests at
+                // present-day coverage. Use ▶ / Play again to replay.
+                next = rangeEndRef.current;
+                cursorRef.current = next;
+                setCursor(next);
+                setPlaying(false);
+                return;
             }
             cursorRef.current = next;
             setCursor(next);
@@ -324,6 +347,52 @@ function Map(props) {
         if (!timelineMode) { setPlaying(false); stopRaf(); }
     }, [timelineMode, stopRaf]);
     React.useEffect(() => () => stopRaf(), [stopRaf]);
+
+    // Viewport-aware one-shot auto-play. Armed by onRunProjectTimeline (a
+    // project ▶ Timeline launch). Waits for the timeline data to load, then
+    // ~1s for the fly to settle, then computes the bloom window from the hexes
+    // currently IN THE VIEWPORT:
+    //   start = day BEFORE the first in-view hex's first_seen (so the bloom
+    //           begins on a blank map), end = end-of-day of the latest in-view
+    //           hex's first_seen ("current coverage" for this region).
+    // If no hexes are in view, fall back to the global data domain. The cleanup
+    // clears the pending timer, so exiting before it fires cancels autoplay.
+    React.useEffect(() => {
+        if (!timelineMode || !autoPlayPending) return;
+        if (!(timelineGeoJson.features && timelineGeoJson.features.length)) return;
+        const timer = setTimeout(() => {
+            let minVis = null, maxVis = null;
+            const map = mapRef.current?.getMap();
+            if (map) {
+                const b = map.getBounds();
+                for (const f of timelineGeoJson.features) {
+                    const t = f.properties && f.properties.first_seen;
+                    if (typeof t !== 'number') continue;
+                    const [lat, lng] = h3ToGeo(f.properties.id);
+                    if (!b.contains([lng, lat])) continue;
+                    if (minVis === null || t < minVis) minVis = t;
+                    if (maxVis === null || t > maxVis) maxVis = t;
+                }
+            }
+            let start, end;
+            if (minVis !== null) {
+                // Hexes in view: frame the bloom on the region's history.
+                start = dayBefore(minVis);
+                end = endOfLocalDay(maxVis);
+            } else {
+                // No hexes in view: fall back to the global domain.
+                start = timeDomain.minT != null ? dayBefore(timeDomain.minT) : 0;
+                end = timeDomain.maxT != null ? endOfLocalDay(timeDomain.maxT) : 0;
+            }
+            cursorRef.current = start;
+            setRangeStart(start);
+            setRangeEnd(end);
+            setCursor(start);
+            setPlaying(true);
+            setAutoPlayPending(false);
+        }, 1000);
+        return () => clearTimeout(timer);
+    }, [timelineMode, autoPlayPending, timelineGeoJson, timeDomain]);
 
     // Control callbacks. Dragging the playhead / setting the cursor manually is
     // a scrub and should not need to pause here (TimelineControl pauses on
@@ -788,7 +857,18 @@ function Map(props) {
             zoom: project.zoom || 12
         }));
         setTimelineMode(true);
+        setAutoPlayPending(true);
     }, []);
+
+    // Replay the current range from its start (used by the ↻ button in the
+    // minimized control). Re-arms playing; the play effect's "if cursor>=end,
+    // reset to start" guard also covers the case where the cursor is parked at
+    // the end, but we set it explicitly here for immediacy.
+    const onPlayAgain = useCallback(() => {
+        cursorRef.current = rangeStart;
+        setCursor(rangeStart);
+        setPlaying(true);
+    }, [rangeStart]);
 
     // Re-apply satellite treatment whenever the user toggles the theme.
     // Initial application happens via the MapGL onLoad callback below; this
@@ -893,6 +973,7 @@ function Map(props) {
                     onTogglePlay={onTogglePlay}
                     onSetSpeed={onSetSpeed}
                     onToggleBaseline={onToggleBaseline}
+                    onPlayAgain={onPlayAgain}
                     onExit={() => setTimelineMode(false)}
                 />
             }
