@@ -98,12 +98,16 @@ function applySatelliteTreatment(map, treatment) {
     });
 }
 
-// CartoCDN dark-matter is a vector basemap (OpenMapTiles schema) that draws
-// roads and highways. The Buoy.Fish map only cares about the land/water
-// divide, so hide every road layer. Roads live in the `transportation` and
-// `transportation_name` (highway shields) source-layers; we also match any
-// layer whose id mentions roads/highways as a fallback in case Carto renames
-// things. Place/coastline/water layers are untouched.
+// Both basemaps draw roads/highways the Buoy.Fish map doesn't want — it only
+// cares about the land/water divide. Hide every road layer on whichever style
+// is active by matching the source-layer the roads live in, with an id-regex
+// fallback in case a style renames a layer:
+//   - CARTO dark-matter (OpenMapTiles schema): roads are in the
+//     `transportation` (geometry) and `transportation_name` (highway shields)
+//     source-layers.
+//   - Mapbox satellite-streets-v12 (Mapbox Streets schema): road geometry,
+//     shields, and road labels all reference the `road` source-layer.
+// Place/coastline/water layers are untouched on either style.
 function hideRoadLayers(map) {
     const layers = map.getStyle()?.layers || [];
     layers.forEach((layer) => {
@@ -112,6 +116,7 @@ function hideRoadLayers(map) {
         const isRoad =
             srcLayer === "transportation" ||
             srcLayer === "transportation_name" ||
+            srcLayer === "road" ||
             /road|highway|motorway|trunk|bridge|tunnel|street/i.test(id);
         if (!isRoad) return;
         try {
@@ -178,11 +183,11 @@ function Map(props) {
         if (!m) return;
         styleLoadHandlerAttachedRef.current = true;
         m.on('style.load', () => {
+            // Strip distracting roadways on BOTH basemaps (Mapbox
+            // satellite-streets and the CARTO fallback both ship road layers).
+            hideRoadLayers(m);
             if (USE_MAPBOX) {
                 applySatelliteTreatment(m, darkSatelliteRef.current ? SATELLITE_DARK_TREATMENT : SATELLITE_LIGHT_TREATMENT);
-            } else {
-                // CARTO vector basemap: strip distracting roadways.
-                hideRoadLayers(m);
             }
         });
     }, []);
@@ -873,11 +878,12 @@ function Map(props) {
                 onLoad={USE_MAPBOX ? (e) => {
                     // Belt-and-suspenders: in the rare case the
                     // ref-callback-attached `style.load` listener (in
-                    // setMapRef) hasn't fired yet, apply the treatment now
-                    // too. The primary application path is the style.load
-                    // listener — which fires ~500 ms earlier and BEFORE
-                    // tiles render, eliminating the bright→dark flash.
+                    // setMapRef) hasn't fired yet, apply the treatment + hide
+                    // roads now too. The primary application path is the
+                    // style.load listener — which fires ~500 ms earlier and
+                    // BEFORE tiles render, eliminating the bright→dark flash.
                     applySatelliteTreatment(e.target, darkSatellite ? SATELLITE_DARK_TREATMENT : SATELLITE_LIGHT_TREATMENT);
+                    hideRoadLayers(e.target);
                 } : undefined}
                 ref={setMapRef}
                 interactiveLayerIds={interactiveLayerIds}
