@@ -128,14 +128,20 @@ const channel = socket.channel("h3:new")
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-// The local-midnight instant one calendar day BEFORE t. DST-safe: we snap t to
-// the start of its local day, then step the Date's calendar day back by one
-// (setDate handles month/year rollover and the 23/25-hour DST days correctly,
-// which a naive `t - DAY_MS` would not).
-function dayBefore(t) {
-    const d = new Date(startOfLocalDay(t));
-    d.setDate(d.getDate() - 1);
-    return d.getTime();
+// Per-project Timeline bloom start dates (local calendar day), keyed by the
+// project `code` from /api/v1/public/projects. Edit here to tune the demo
+// narrative per project. Projects not listed use FALLBACK_LOOKBACK_DAYS.
+const PROJECT_TIMELINE_START = {
+  'punta-eugenia-baja': '2026-06-01',
+  'punta-abreojos-baja': '2026-04-10',
+  // 'nova-scotia': no usable date yet (pre-app coverage) → falls back below.
+};
+const FALLBACK_LOOKBACK_DAYS = 60;
+
+// 'YYYY-MM-DD' -> epoch-ms at LOCAL midnight of that calendar day.
+function parseLocalDate(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d).getTime();
 }
 
 function Map(props) {
@@ -211,10 +217,11 @@ function Map(props) {
     // state it mirrors, to dodge the minifier TDZ gotcha).
     const [timelineMode, setTimelineMode] = useState(false);
     const [timelineGeoJson, setTimelineGeoJson] = useState(emptyFC);
-    // When a project ▶ Timeline launch is in flight: set true alongside the fly
-    // + setTimelineMode(true), consumed by the auto-play effect below once the
-    // timeline data has loaded (so the bloom starts from a viewport-aware date).
-    const [autoPlayPending, setAutoPlayPending] = useState(false);
+    // When a project ▶ Timeline launch is in flight: holds the queued bloom
+    // window { start, end } (epoch-ms), or null. Set by onRunProjectTimeline
+    // alongside the fly + setTimelineMode(true), consumed by the deterministic
+    // auto-play effect below once the timeline data has loaded.
+    const [pendingPlay, setPendingPlay] = useState(null);
     const timelineModeRef = useRef(false);
     React.useEffect(() => { timelineModeRef.current = timelineMode; }, [timelineMode]);
 
@@ -272,7 +279,7 @@ function Map(props) {
         // During an auto-play launch (every project ▶ Timeline entry) the blank
         // init in onRunProjectTimeline + the auto-play effect own the lifecycle.
         // Skip this effect so it can't flash full coverage before the bloom.
-        if (autoPlayPending) return;
+        if (pendingPlay) return;
         const { minT, maxT } = timeDomain;
         if (minT === null || maxT === null) return;
         const start = startOfLocalDay(minT);
@@ -281,7 +288,7 @@ function Map(props) {
         setRangeEnd(end);
         setCursor(end);
         setPlaying(false);
-    }, [timelineMode, timeDomain, autoPlayPending]);
+    }, [timelineMode, timeDomain, pendingPlay]);
 
     // Animation loop. rAF with a timestamp delta (no 60fps assumption). A full
     // sweep of the selected range takes TIMELINE_SWEEP_MS / speed; on reaching
@@ -352,51 +359,22 @@ function Map(props) {
     }, [timelineMode, stopRaf]);
     React.useEffect(() => () => stopRaf(), [stopRaf]);
 
-    // Viewport-aware one-shot auto-play. Armed by onRunProjectTimeline (a
-    // project ▶ Timeline launch). Waits for the timeline data to load, then
-    // ~1s for the fly to settle, then computes the bloom window from the hexes
-    // currently IN THE VIEWPORT:
-    //   start = day BEFORE the first in-view hex's first_seen (so the bloom
-    //           begins on a blank map), end = end-of-day of the latest in-view
-    //           hex's first_seen ("current coverage" for this region).
-    // If no hexes are in view, fall back to the global data domain. The cleanup
-    // clears the pending timer, so exiting before it fires cancels autoplay.
+    // Deterministic one-shot auto-play. Waits for the timeline data to load, then
+    // ~800ms for the fly to settle, then plays the bloom over the pending window.
     React.useEffect(() => {
-        if (!timelineMode || !autoPlayPending) return;
+        if (!pendingPlay) return;
         if (!(timelineGeoJson.features && timelineGeoJson.features.length)) return;
+        const { start, end } = pendingPlay;
         const timer = setTimeout(() => {
-            let minVis = null, maxVis = null;
-            const map = mapRef.current?.getMap();
-            if (map) {
-                const b = map.getBounds();
-                for (const f of timelineGeoJson.features) {
-                    const t = f.properties && f.properties.first_seen;
-                    if (typeof t !== 'number') continue;
-                    const [lat, lng] = h3ToGeo(f.properties.id);
-                    if (!b.contains([lng, lat])) continue;
-                    if (minVis === null || t < minVis) minVis = t;
-                    if (maxVis === null || t > maxVis) maxVis = t;
-                }
-            }
-            let start, end;
-            if (minVis !== null) {
-                // Hexes in view: frame the bloom on the region's history.
-                start = dayBefore(minVis);
-                end = endOfLocalDay(maxVis);
-            } else {
-                // No hexes in view: fall back to the global domain.
-                start = timeDomain.minT != null ? dayBefore(timeDomain.minT) : 0;
-                end = timeDomain.maxT != null ? endOfLocalDay(timeDomain.maxT) : 0;
-            }
             cursorRef.current = start;
             setRangeStart(start);
             setRangeEnd(end);
             setCursor(start);
             setPlaying(true);
-            setAutoPlayPending(false);
-        }, 1000);
+            setPendingPlay(null);
+        }, 800);
         return () => clearTimeout(timer);
-    }, [timelineMode, autoPlayPending, timelineGeoJson, timeDomain]);
+    }, [pendingPlay, timelineGeoJson]);
 
     // Control callbacks. Dragging the playhead / setting the cursor manually is
     // a scrub and should not need to pause here (TimelineControl pauses on
@@ -859,24 +837,19 @@ function Map(props) {
     // enter Timeline mode. No data scoping — the timeline stays global; we only
     // frame the view on the project.
     const onRunProjectTimeline = useCallback((project) => {
-        setViewState(prev => ({
-            ...prev,
-            latitude: project.lat,
-            longitude: project.lng,
-            zoom: project.zoom || 12
-        }));
+        // Fly to the project's framed view.
+        setViewState(prev => ({ ...prev, latitude: project.lat, longitude: project.lng, zoom: project.zoom || 12 }));
         setTimelineMode(true);
-        setAutoPlayPending(true);
-        // Start BLANK synchronously so timeline mode mounts with no hexes drawn.
-        // With range 0..0 and cursor 0, the reveal filter (first_seen in [0,0])
-        // and the baseline filter (first_seen < 0) both match nothing (hexes are
-        // positive epoch-ms) → blank map the instant the layers mount. The
-        // auto-play effect then computes the real window ~1s later and fills the
-        // bloom in from blank, avoiding the old full→blank→fill flash.
-        setRangeStart(0);
-        setRangeEnd(0);
-        setCursor(0);
-        setPlaying(false);
+        // Start BLANK so the bloom begins on an empty map (no full→blank flash).
+        setRangeStart(0); setRangeEnd(0); setCursor(0); setPlaying(false);
+        // Deterministic window: hardcoded per-project start (or today−60d fallback),
+        // sweeping to TODAY ("current coverage").
+        const iso = PROJECT_TIMELINE_START[project.code];
+        const start = iso
+            ? startOfLocalDay(parseLocalDate(iso))
+            : startOfLocalDay(Date.now() - FALLBACK_LOOKBACK_DAYS * DAY_MS);
+        const end = endOfLocalDay(Date.now());
+        setPendingPlay({ start, end });
     }, []);
 
     // Replay the current range from its start (used by the ↻ button in the
@@ -991,7 +964,7 @@ function Map(props) {
                     speed={speed}
                     showBaseline={showBaseline}
                     inRangeCount={inRangeCount}
-                    autoPlayPending={autoPlayPending}
+                    autoPlayPending={pendingPlay !== null}
                     onSetRangeStart={onSetRangeStart}
                     onSetRangeEnd={onSetRangeEnd}
                     onSetCursor={onSetCursor}
