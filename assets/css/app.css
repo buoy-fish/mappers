@@ -123,7 +123,6 @@ body {
 .nav-link a:hover {
   text-decoration: underline;
 }
-
 .legend-transition-enter-active {
   transition: transform 0.2s ease-out, opacity 0.22s ease-out;
 }
@@ -205,6 +204,32 @@ body {
 }
 .project-item:hover {
   background: rgba(255,152,0,0.3);
+}
+/* Each project row: name (flexes to fill) + compact "▶ Timeline" launcher. */
+.project-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.375rem;
+}
+.project-row .project-item {
+  flex: 1;
+  width: auto;
+}
+.project-timeline-btn {
+  flex: 0 0 auto;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid rgba(255,152,0,0.5);
+  border-radius: 6px;
+  background: rgba(255,152,0,0.12);
+  color: #FF9800;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.project-timeline-btn:hover {
+  background: #FF9800;
+  color: #141418;
 }
 /*end projects dropdown*/
 
@@ -428,6 +453,184 @@ body {
 /*end gateway toggle*/
 
 /** end main stats stuff **/
+
+/** start timeline control **/
+/* Bottom-center overlay, above the map, non-blocking. Dark UI + Buoy.Fish
+   orange (#FF9800), matching .legend / .gateway-switch. */
+.timeline-control {
+  position: fixed;
+  left: 50%;
+  bottom: 1.5rem;
+  transform: translateX(-50%);
+  z-index: 5;
+  width: min(640px, calc(100vw - 2rem));
+  padding: 0.75rem 1rem;
+  background: rgba(20, 20, 24, 0.62);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 0.8125rem;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.timeline-control-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.timeline-control-row-secondary {
+  margin-top: 0.625rem;
+  justify-content: space-between;
+}
+.timeline-track-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.timeline-track {
+  position: relative;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.15);
+  cursor: pointer;
+}
+/* Selected-range highlight beneath handles/playhead. */
+.timeline-range-fill {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: rgba(255, 152, 0, 0.35);
+  border-radius: 9999px;
+  pointer-events: none;
+}
+.timeline-playhead {
+  position: absolute;
+  top: 50%;
+  width: 0.875rem;
+  height: 0.875rem;
+  margin-left: -0.4375rem;
+  transform: translateY(-50%);
+  border-radius: 9999px;
+  background: #fff;
+  border: 2px solid #FF9800;
+  cursor: grab;
+  z-index: 3;
+}
+.timeline-playhead:active {
+  cursor: grabbing;
+}
+.timeline-handle {
+  position: absolute;
+  top: 50%;
+  width: 0.625rem;
+  height: 1.125rem;
+  margin-left: -0.3125rem;
+  transform: translateY(-50%);
+  border-radius: 3px;
+  background: #FF9800;
+  border: 1px solid rgba(0, 0, 0, 0.4);
+  cursor: ew-resize;
+  z-index: 2;
+}
+.timeline-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.4375rem;
+  font-size: 0.6875rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+.timeline-label-cursor {
+  color: #FF9800;
+  font-weight: 600;
+}
+.timeline-speed {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 0.25rem;
+}
+.timeline-speed-btn {
+  min-width: 1.75rem;
+  height: 1.5rem;
+  padding: 0 0.375rem;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.timeline-speed-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+.timeline-speed-btn.active {
+  background: #FF9800;
+  border-color: #FF9800;
+  color: #141418;
+  font-weight: 600;
+}
+.timeline-baseline-toggle {
+  font-size: 0.8125rem;
+}
+.timeline-empty-caption {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.65);
+  font-style: italic;
+}
+/* Frosted-glass floating HUD: clock / replay / close FAB cluster, shared by the
+   minimized and expanded views, plus the matching play/pause FAB. */
+.timeline-fab-cluster {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+.timeline-fab {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(18, 18, 22, 0.42);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  color: rgba(255, 255, 255, 0.82);
+  cursor: pointer;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.40);
+  transition: color .18s ease, border-color .18s ease, background .18s ease,
+              transform .12s ease, box-shadow .18s ease;
+}
+.timeline-fab:hover {
+  color: #FF9800;
+  border-color: rgba(255, 152, 0, 0.60);
+  box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.14), 0 6px 22px rgba(0, 0, 0, 0.50);
+  transform: translateY(-1px);
+}
+.timeline-fab:active { transform: translateY(0); }
+.timeline-fab.active {
+  color: #FF9800;
+  border-color: rgba(255, 152, 0, 0.70);
+  background: rgba(255, 152, 0, 0.12);
+}
+.timeline-fab svg { display: block; }
+/* Minimized = just the floating cluster, no panel chrome. Keeps the
+   bottom-center fixed positioning from .timeline-control. */
+.timeline-control-mini {
+  width: auto;
+  background: none;
+  border: none;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+/*end timeline control*/
 
 /** start welcome modal **/
 

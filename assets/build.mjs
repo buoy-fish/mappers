@@ -78,6 +78,7 @@ const buildOptions = {
     "process.env.BUOY_API_BASE_URL": JSON.stringify(
       process.env.BUOY_API_BASE_URL ?? "https://app.buoy.fish"
     ),
+    "process.env.TIMELINE_PROJECT_CONFIG": JSON.stringify(process.env.TIMELINE_PROJECT_CONFIG || ""),
   },
   logLevel: "info",
 }

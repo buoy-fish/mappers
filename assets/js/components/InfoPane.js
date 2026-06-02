@@ -266,13 +266,19 @@ function InfoPane(props) {
             { showProjectsPane &&
                 <div className="projects-pane">
                     {projects.map(project => (
-                        <button
-                            key={project.code || project.name}
-                            className="project-item"
-                            onClick={() => { props.onFlyToProject(project); setShowProjectsPane(false); }}
-                        >
-                            {project.name}
-                        </button>
+                        <div key={project.code || project.name} className="project-row">
+                            <button
+                                className="project-item"
+                                onClick={() => { props.onFlyToProject(project); setShowProjectsPane(false); }}
+                            >
+                                {project.name}
+                            </button>
+                            <button
+                                className="project-timeline-btn"
+                                title="Run coverage timeline for this region"
+                                onClick={() => { props.onRunProjectTimeline(project); setShowProjectsPane(false); }}
+                            >▶ Timeline</button>
+                        </div>
                     ))}
                 </div>
             }
