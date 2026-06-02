@@ -128,14 +128,18 @@ const channel = socket.channel("h3:new")
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-// Per-project Timeline bloom start dates (local calendar day), keyed by the
-// project `code` from /api/v1/public/projects. Edit here to tune the demo
-// narrative per project. Projects not listed use FALLBACK_LOOKBACK_DAYS.
-const PROJECT_TIMELINE_START = {
-  'punta-eugenia-baja': '2026-06-01',
-  'punta-abreojos-baja': '2026-04-10',
-  // 'nova-scotia': no usable date yet (pre-app coverage) → falls back below.
-};
+// Per-project Timeline config, injected at build time from the
+// TIMELINE_PROJECT_CONFIG env var (.env.development locally; the server-side
+// .env in prod — see .env.production.example). Shape, keyed by project `code`:
+//   { "<code>": { "start": "YYYY-MM-DD", "speed": 1|2|4 }, ... }
+// `start` = the bloom start date; `speed` = the default sweep speed for that
+// project (user can still change it in the expanded scrubber). Missing/invalid
+// → empty config; such projects fall back to today − FALLBACK_LOOKBACK_DAYS and
+// speed 1. This is the interim home before app.buoy.fish serves it (behind auth).
+const TIMELINE_PROJECT_CONFIG = (() => {
+  try { return JSON.parse(process.env.TIMELINE_PROJECT_CONFIG || "{}"); }
+  catch (e) { console.warn("Invalid TIMELINE_PROJECT_CONFIG JSON:", e); return {}; }
+})();
 const FALLBACK_LOOKBACK_DAYS = 60;
 
 // 'YYYY-MM-DD' -> epoch-ms at LOCAL midnight of that calendar day.
@@ -239,7 +243,7 @@ function Map(props) {
     const [cursor, setCursor] = useState(0);
     const [playing, setPlaying] = useState(false);
     const [speed, setSpeed] = useState(1);
-    const [showBaseline, setShowBaseline] = useState(true);
+    const [showBaseline, setShowBaseline] = useState(false);
 
     // Time domain of the loaded timeline data: [minT, maxT] over first_seen.
     // Memoized so handle/playhead math has a stable domain. When there are no
@@ -822,13 +826,16 @@ function Map(props) {
         setTimelineMode(true);
         // Start BLANK so the bloom begins on an empty map (no full→blank flash).
         setRangeStart(0); setRangeEnd(0); setCursor(0); setPlaying(false);
-        // Deterministic window: hardcoded per-project start (or today−60d fallback),
+        // Deterministic window: per-project start (or today−60d fallback),
         // sweeping to TODAY ("current coverage").
-        const iso = PROJECT_TIMELINE_START[project.code];
-        const start = iso
-            ? startOfLocalDay(parseLocalDate(iso))
+        const cfg = TIMELINE_PROJECT_CONFIG[project.code] || {};
+        const start = cfg.start
+            ? startOfLocalDay(parseLocalDate(cfg.start))
             : startOfLocalDay(Date.now() - FALLBACK_LOOKBACK_DAYS * DAY_MS);
         const end = endOfLocalDay(Date.now());
+        // Apply the project's default sweep speed (falls back to 1×). The user can
+        // still change it via the expanded scrubber's speed buttons.
+        setSpeed(cfg.speed || 1);
         setPendingPlay({ start, end });
     }, []);
 
