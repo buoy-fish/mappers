@@ -100,12 +100,16 @@ function TimelineControl(props) {
         onSetCursor, onTogglePlay, onSetSpeed, onToggleBaseline,
         onPlayAgain,
         onExit,
+        loop, onToggleLoop,
+        // expanded/onToggleExpanded are LIFTED to Map.js (single source of truth)
+        // so the scrubber's open state is both deep-link-settable (?open=1) and
+        // readable into the shareable URL. The clock FAB toggles via onToggleExpanded.
+        expanded, onToggleExpanded,
+        shareUrl,
     } = props;
 
-    // The bar starts MINIMIZED: just the clock / replay / close FAB cluster. The
-    // clock toggles the full scrubber open. This keeps the auto-played bloom
-    // unobstructed by default; the full controls are one click away.
-    const [expanded, setExpanded] = useState(false);
+    // Transient "Copied!" affordance for the Copy-link button.
+    const [copied, setCopied] = useState(false);
 
     const trackRef = useRef(null);
     // Which thing is being dragged: 'start' | 'end' | 'playhead' | null.
@@ -189,6 +193,32 @@ function TimelineControl(props) {
     const cursorPct = tToPct(cursor);
     const rangeWidthPct = Math.max(0, endPct - startPct);
 
+    // Copy the shareable deep-link to the clipboard. Uses the async Clipboard
+    // API in secure contexts (incl. localhost); falls back to a hidden-textarea
+    // + execCommand for any non-secure/old-browser edge. Flips the label to
+    // "Copied!" for 1.5s.
+    const onCopyLink = useCallback(async () => {
+        if (!shareUrl) return;
+        try {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(shareUrl);
+            } else {
+                const ta = document.createElement('textarea');
+                ta.value = shareUrl;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+            }
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+        } catch (_) {
+            // Clipboard blocked (permissions / sandbox) — no-op.
+        }
+    }, [shareUrl]);
+
     // The clock / replay / close frosted-glass FAB cluster. Shared between the
     // minimized and expanded views. In the minimized view the clock opens the
     // bar; in the expanded view it collapses it again (always .active there).
@@ -197,7 +227,7 @@ function TimelineControl(props) {
             <button
                 type="button"
                 className={'timeline-fab' + (expanded ? ' active' : '')}
-                onClick={() => setExpanded(e => !e)}
+                onClick={onToggleExpanded}
                 aria-label={expanded ? 'Hide timeline scrubber' : 'Show timeline scrubber'}
                 aria-expanded={expanded}
                 title={expanded ? 'Hide timeline scrubber' : 'Show timeline scrubber'}
@@ -301,20 +331,42 @@ function TimelineControl(props) {
             </div>
 
             <div className="timeline-control-row timeline-control-row-secondary">
-                <label className="gateway-toggle timeline-baseline-toggle">
-                    <button
-                        role="switch"
-                        aria-checked={showBaseline}
-                        onClick={onToggleBaseline}
-                        className={`gateway-switch ${showBaseline ? 'active' : ''}`}
-                    >
-                        <span className="gateway-switch-knob" />
-                    </button>
-                    <span>Show baseline</span>
-                </label>
-                {inRangeCount === 0 && !autoPlayPending &&
-                    <span className="timeline-empty-caption">No new coverage in this range</span>
-                }
+                <div className="timeline-toggles">
+                    <label className="gateway-toggle timeline-baseline-toggle">
+                        <button
+                            role="switch"
+                            aria-checked={showBaseline}
+                            onClick={onToggleBaseline}
+                            className={`gateway-switch ${showBaseline ? 'active' : ''}`}
+                        >
+                            <span className="gateway-switch-knob" />
+                        </button>
+                        <span>Show baseline</span>
+                    </label>
+                    <label className="gateway-toggle timeline-loop-toggle">
+                        <button
+                            role="switch"
+                            aria-checked={!!loop}
+                            onClick={onToggleLoop}
+                            className={`gateway-switch ${loop ? 'active' : ''}`}
+                        >
+                            <span className="gateway-switch-knob" />
+                        </button>
+                        <span>Loop</span>
+                    </label>
+                    {inRangeCount === 0 && !autoPlayPending &&
+                        <span className="timeline-empty-caption">No new coverage in this range</span>
+                    }
+                </div>
+                {/* Serialize the current view to a shareable "click to play" link. */}
+                <button
+                    type="button"
+                    className="timeline-copy-link-btn"
+                    onClick={onCopyLink}
+                    disabled={!shareUrl}
+                    aria-label="Copy shareable link"
+                    title="Copy a link that replays this timeline"
+                >{copied ? 'Copied!' : 'Copy link'}</button>
             </div>
         </div>
     );
