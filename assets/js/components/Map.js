@@ -98,27 +98,41 @@ function applySatelliteTreatment(map, treatment) {
     });
 }
 
-// Both basemaps draw roads/highways the Buoy.Fish map doesn't want — it only
-// cares about the land/water divide. Hide every road layer on whichever style
-// is active by matching the source-layer the roads live in, with an id-regex
-// fallback in case a style renames a layer:
-//   - CARTO dark-matter (OpenMapTiles schema): roads are in the
-//     `transportation` (geometry) and `transportation_name` (highway shields)
-//     source-layers.
-//   - Mapbox satellite-streets-v12 (Mapbox Streets schema): road geometry,
-//     shields, and road labels all reference the `road` source-layer.
-// Place/coastline/water layers are untouched on either style.
-function hideRoadLayers(map) {
+// Both basemaps draw cartographic clutter the Buoy.Fish map doesn't want — it
+// only cares about the land/water divide so the coverage hexes are the focus.
+// Hide three families of layers on whichever style is active by matching the
+// source-layer they live in, with an id-regex fallback in case a style renames
+// a layer. Coastline / water / place (city) labels are left untouched.
+//   1. Roads/highways:
+//      - CARTO dark-matter (OpenMapTiles): `transportation` (geometry) +
+//        `transportation_name` (highway shields).
+//      - Mapbox satellite-streets-v12 (Mapbox Streets v8): road geometry,
+//        shields, and road labels all use the `road` source-layer.
+//   2. Admin boundary lines (province/state/country borders):
+//      - Mapbox: `admin` source-layer.  CARTO: `boundary` source-layer.
+//   3. National parks (the green fill + tree-icon label):
+//      - Mapbox: `national_park` source-layer (fill) + the park label layers
+//        (id contains "national-park"/"national_park").  CARTO: `park`.
+function hideBasemapClutter(map) {
     const layers = map.getStyle()?.layers || [];
     layers.forEach((layer) => {
         const srcLayer = layer["source-layer"] || "";
         const id = layer.id || "";
-        const isRoad =
+        const isClutter =
+            // roads
             srcLayer === "transportation" ||
             srcLayer === "transportation_name" ||
             srcLayer === "road" ||
-            /road|highway|motorway|trunk|bridge|tunnel|street/i.test(id);
-        if (!isRoad) return;
+            /road|highway|motorway|trunk|bridge|tunnel|street/i.test(id) ||
+            // admin boundaries
+            srcLayer === "admin" ||
+            srcLayer === "boundary" ||
+            /boundary|admin-[01]/i.test(id) ||
+            // national parks (fill + label)
+            srcLayer === "national_park" ||
+            srcLayer === "park" ||
+            /national.?park/i.test(id);
+        if (!isClutter) return;
         try {
             map.setLayoutProperty(layer.id, "visibility", "none");
         } catch (_) {
@@ -183,9 +197,9 @@ function Map(props) {
         if (!m) return;
         styleLoadHandlerAttachedRef.current = true;
         m.on('style.load', () => {
-            // Strip distracting roadways on BOTH basemaps (Mapbox
-            // satellite-streets and the CARTO fallback both ship road layers).
-            hideRoadLayers(m);
+            // Strip distracting roads, admin boundaries, and national parks on
+            // BOTH basemaps (Mapbox satellite-streets and the CARTO fallback).
+            hideBasemapClutter(m);
             if (USE_MAPBOX) {
                 applySatelliteTreatment(m, darkSatelliteRef.current ? SATELLITE_DARK_TREATMENT : SATELLITE_LIGHT_TREATMENT);
             }
@@ -883,7 +897,7 @@ function Map(props) {
                     // style.load listener — which fires ~500 ms earlier and
                     // BEFORE tiles render, eliminating the bright→dark flash.
                     applySatelliteTreatment(e.target, darkSatellite ? SATELLITE_DARK_TREATMENT : SATELLITE_LIGHT_TREATMENT);
-                    hideRoadLayers(e.target);
+                    hideBasemapClutter(e.target);
                 } : undefined}
                 ref={setMapRef}
                 interactiveLayerIds={interactiveLayerIds}
