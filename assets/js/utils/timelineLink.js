@@ -4,15 +4,25 @@
 //
 // URL contract (query params on root):
 //   /?play=<project-code>&start=YYYY-MM-DD&end=YYYY-MM-DD&speed=1|2|4
-//      &baseline=0|1&loop=0|1&open=0|1
+//      &baseline=0|1&loop=0|1&open=0|1&lat=<deg>&lng=<deg>&zoom=<level>
 //
 // `play` (project code) is required; absent ⇒ not a Timeline deep-link. The rest
 // are optional; when absent/invalid, parse returns null for that field so the
 // caller (Map.js) can fall back to per-project TIMELINE_PROJECT_CONFIG, then
-// hardcoded defaults. This module is intentionally framework-free (no React, no
-// Map import) so it's trivially unit-testable from plain Node.
+// hardcoded defaults. lat/lng/zoom capture the sender's exact camera so the
+// receiver sees the same framing (overriding the project's default coords/zoom).
+// This module is intentionally framework-free (no React, no Map import) so it's
+// trivially unit-testable from plain Node.
 
 const VALID_SPEEDS = [1, 2, 4];
+
+// Parse a numeric query param into a finite number within [min, max], else null.
+function numInRange(raw, min, max) {
+    if (raw == null) return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < min || n > max) return null;
+    return n;
+}
 
 // epoch-ms -> 'YYYY-MM-DD' in the browser's LOCAL timezone (matching how the
 // scrubber day-snaps + labels dates). NOT toISOString() — that's UTC and would
@@ -52,7 +62,7 @@ function boolParam(v) {
 // Build the absolute shareable URL from the current Timeline state. `origin`
 // defaults to window.location.origin (falls back to '' in non-browser contexts).
 export function buildTimelineLink(state, origin) {
-    const { projectCode, rangeStart, rangeEnd, speed, baseline, loop, open } = state || {};
+    const { projectCode, rangeStart, rangeEnd, speed, baseline, loop, open, lat, lng, zoom } = state || {};
     const base = (origin != null ? origin : (typeof window !== 'undefined' ? window.location.origin : '')) || '';
     const p = new URLSearchParams();
     p.set('play', projectCode || '');
@@ -62,6 +72,11 @@ export function buildTimelineLink(state, origin) {
     p.set('baseline', baseline ? '1' : '0');
     p.set('loop', loop ? '1' : '0');
     p.set('open', open ? '1' : '0');
+    // Sender's exact camera (~1 m of lat/lng precision is plenty). Omitted when
+    // not finite so a hand-crafted link can still fall back to project framing.
+    if (Number.isFinite(lat)) p.set('lat', lat.toFixed(5));
+    if (Number.isFinite(lng)) p.set('lng', lng.toFixed(5));
+    if (Number.isFinite(zoom)) p.set('zoom', zoom.toFixed(2));
     return `${base}/?${p.toString()}`;
 }
 
@@ -85,5 +100,8 @@ export function parseTimelineLink(search) {
         baseline: boolParam(p.get('baseline')),
         loop: boolParam(p.get('loop')),
         open: boolParam(p.get('open')),
+        lat: numInRange(p.get('lat'), -90, 90),
+        lng: numInRange(p.get('lng'), -180, 180),
+        zoom: numInRange(p.get('zoom'), 0, 22),
     };
 }

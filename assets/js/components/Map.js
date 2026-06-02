@@ -860,12 +860,12 @@ function Map(props) {
     // explicit so both the InfoPane project launch (config defaults) and a
     // shareable deep-link (URL-derived values) funnel through one path and reuse
     // the existing pendingPlay → data-loaded → auto-play machinery.
-    const launchTimeline = useCallback(({ project, start, end, speed, baseline, loop, open }) => {
-        setViewState(prev => ({ ...prev, latitude: project.lat, longitude: project.lng, zoom: project.zoom || 12 }));
+    const launchTimeline = useCallback(({ projectCode, lat, lng, zoom, start, end, speed, baseline, loop, open }) => {
+        setViewState(prev => ({ ...prev, latitude: lat, longitude: lng, zoom }));
         setTimelineMode(true);
         // Start BLANK so the bloom begins on an empty map (no full→blank flash).
         setRangeStart(0); setRangeEnd(0); setCursor(0); setPlaying(false);
-        setActiveTimelineProjectCode(project.code);
+        setActiveTimelineProjectCode(projectCode);
         setSpeed(speed || 1);
         setShowBaseline(!!baseline);
         setLoop(!!loop);
@@ -875,15 +875,18 @@ function Map(props) {
 
     // Run the (global) Timeline framed on a project's region (InfoPane ▶ button).
     // No data scoping — the timeline stays global; we only frame the view. Uses
-    // the per-project config for start/speed and the non-deep-link defaults
-    // (baseline/loop off, scrubber minimized).
+    // the per-project config for start/speed, the project's coords/zoom for
+    // framing, and the non-deep-link defaults (baseline/loop off, minimized).
     const onRunProjectTimeline = useCallback((project) => {
         const cfg = TIMELINE_PROJECT_CONFIG[project.code] || {};
         const start = cfg.start
             ? startOfLocalDay(parseLocalDate(cfg.start))
             : startOfLocalDay(Date.now() - FALLBACK_LOOKBACK_DAYS * DAY_MS);
         const end = endOfLocalDay(Date.now());
-        launchTimeline({ project, start, end, speed: cfg.speed || 1, baseline: false, loop: false, open: false });
+        launchTimeline({
+            projectCode: project.code, lat: project.lat, lng: project.lng, zoom: project.zoom || 12,
+            start, end, speed: cfg.speed || 1, baseline: false, loop: false, open: false,
+        });
     }, [launchTimeline]);
 
     // Shareable deep-link: on mount, if the URL carries ?play=<project-code>,
@@ -909,7 +912,15 @@ function Map(props) {
                 start = cfgStart; end = cfgEnd;
             }
             const speed = intent.speed != null ? intent.speed : (cfg.speed || 1);
-            launchTimeline({ project, start, end, speed, baseline: intent.baseline, loop: intent.loop, open: intent.open });
+            // Camera: the sender's exact lat/lng/zoom if the link carries them,
+            // else the project's default framing.
+            const lat = intent.lat != null ? intent.lat : project.lat;
+            const lng = intent.lng != null ? intent.lng : project.lng;
+            const zoom = intent.zoom != null ? intent.zoom : (project.zoom || 12);
+            launchTimeline({
+                projectCode: project.code, lat, lng, zoom,
+                start, end, speed, baseline: intent.baseline, loop: intent.loop, open: intent.open,
+            });
         };
         const resolve = (list) => (list || []).find(p => p.code === intent.play) || null;
         // getInitialProjects() is synchronous (cache/fallback, never null) — the
@@ -934,8 +945,12 @@ function Map(props) {
         return buildTimelineLink({
             projectCode: activeTimelineProjectCode,
             rangeStart, rangeEnd, speed, baseline: showBaseline, loop, open: timelineExpanded,
+            // Capture the sender's live camera so the link recreates this exact
+            // view, not the project's default coords/zoom.
+            lat: viewState.latitude, lng: viewState.longitude, zoom: viewState.zoom,
         });
-    }, [activeTimelineProjectCode, rangeStart, rangeEnd, speed, showBaseline, loop, timelineExpanded]);
+    }, [activeTimelineProjectCode, rangeStart, rangeEnd, speed, showBaseline, loop, timelineExpanded,
+        viewState.latitude, viewState.longitude, viewState.zoom]);
 
     // Replay the current range from its start (used by the ↻ button in the
     // minimized control). Re-arms playing; the play effect's "if cursor>=end,
