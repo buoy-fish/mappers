@@ -270,26 +270,6 @@ function Map(props) {
         return n;
     }, [timelineGeoJson, rangeStart, rangeEnd]);
 
-    // On entering timeline mode (once the domain is known), initialize the
-    // window to all-time and park the cursor at rangeEnd so the full current
-    // footprint shows immediately (matching the live view). Re-runs if the
-    // domain changes (e.g. data arrives after entering the mode).
-    React.useEffect(() => {
-        if (!timelineMode) return;
-        // During an auto-play launch (every project ▶ Timeline entry) the blank
-        // init in onRunProjectTimeline + the auto-play effect own the lifecycle.
-        // Skip this effect so it can't flash full coverage before the bloom.
-        if (pendingPlay) return;
-        const { minT, maxT } = timeDomain;
-        if (minT === null || maxT === null) return;
-        const start = startOfLocalDay(minT);
-        const end = endOfLocalDay(maxT);
-        setRangeStart(start);
-        setRangeEnd(end);
-        setCursor(end);
-        setPlaying(false);
-    }, [timelineMode, timeDomain, pendingPlay]);
-
     // Animation loop. rAF with a timestamp delta (no 60fps assumption). A full
     // sweep of the selected range takes TIMELINE_SWEEP_MS / speed; on reaching
     // rangeEnd we STOP (one-shot — the bloom plays once to current coverage and
