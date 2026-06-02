@@ -28,6 +28,38 @@ import { useRef, useCallback, useState } from 'react';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+// Crisp line-art SVG icons (24×24 viewBox, stroke-based, currentColor) for the
+// frosted-glass FAB cluster. Defined once so the minimized and expanded views
+// share identical glyphs.
+const IconClock = (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v5l3 2" />
+    </svg>
+);
+const IconReplay = (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 12a9 9 0 1 0 3-6.7" />
+        <path d="M3 4v4h4" />
+    </svg>
+);
+const IconClose = (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
+);
+const IconPlay = (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+        <path d="M8 5v14l11-7z" />
+    </svg>
+);
+const IconPause = (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+        <rect x="6" y="5" width="4" height="14" rx="1" />
+        <rect x="14" y="5" width="4" height="14" rx="1" />
+    </svg>
+);
+
 // Snap an epoch-ms instant to LOCAL midnight (start of that calendar day in the
 // browser's timezone).
 export function startOfLocalDay(t) {
@@ -62,8 +94,8 @@ function TimelineControl(props) {
         onExit,
     } = props;
 
-    // The bar starts MINIMIZED: just the ⏳ / ↻ / ✕ icon cluster. The hourglass
-    // toggles the full scrubber open. This keeps the auto-played bloom
+    // The bar starts MINIMIZED: just the clock / replay / close FAB cluster. The
+    // clock toggles the full scrubber open. This keeps the auto-played bloom
     // unobstructed by default; the full controls are one click away.
     const [expanded, setExpanded] = useState(false);
 
@@ -142,39 +174,42 @@ function TimelineControl(props) {
     const cursorPct = tToFrac(cursor) * 100;
     const rangeWidthPct = Math.max(0, endPct - startPct);
 
-    // The hourglass / play-again / exit icon cluster. Shared between the
-    // minimized and expanded views. In the minimized view the ⏳ opens the bar;
-    // in the expanded view it collapses it again.
-    const iconCluster = (
-        <div className="timeline-icon-cluster">
+    // The clock / replay / close frosted-glass FAB cluster. Shared between the
+    // minimized and expanded views. In the minimized view the clock opens the
+    // bar; in the expanded view it collapses it again (always .active there).
+    const fabCluster = (
+        <div className="timeline-fab-cluster">
             <button
-                className={'timeline-icon-btn' + (expanded ? ' active' : '')}
+                type="button"
+                className={'timeline-fab' + (expanded ? ' active' : '')}
                 onClick={() => setExpanded(e => !e)}
                 aria-label={expanded ? 'Hide timeline scrubber' : 'Show timeline scrubber'}
                 aria-expanded={expanded}
                 title={expanded ? 'Hide timeline scrubber' : 'Show timeline scrubber'}
-            >⏳</button>
+            >{IconClock}</button>
             <button
-                className="timeline-icon-btn"
+                type="button"
+                className="timeline-fab"
                 onClick={onPlayAgain}
                 aria-label="Play again"
                 title="Play again"
-            >↻</button>
+            >{IconReplay}</button>
             <button
-                className="timeline-icon-btn timeline-exit"
+                type="button"
+                className="timeline-fab"
                 onClick={onExit}
                 aria-label="Exit timeline"
                 title="Exit timeline"
-            >✕</button>
+            >{IconClose}</button>
         </div>
     );
 
-    // Minimized view: compact icon cluster only, plus the empty-state caption
+    // Minimized view: floating FAB cluster only, plus the empty-state caption
     // when there's no new coverage in the current range.
     if (!expanded) {
         return (
             <div className="timeline-control timeline-control-mini">
-                {iconCluster}
+                {fabCluster}
                 {inRangeCount === 0 &&
                     <span className="timeline-empty-caption">No new coverage in this range</span>
                 }
@@ -186,12 +221,13 @@ function TimelineControl(props) {
         <div className="timeline-control">
             <div className="timeline-control-row">
                 <button
-                    className="timeline-playpause"
+                    type="button"
+                    className={'timeline-fab' + (playing ? ' active' : '')}
                     onClick={onTogglePlay}
                     aria-label={playing ? 'Pause' : 'Play'}
                     title={playing ? 'Pause' : 'Play'}
                 >
-                    {playing ? '❚❚' : '▶'}
+                    {playing ? IconPause : IconPlay}
                 </button>
 
                 <div className="timeline-track-wrap">
@@ -243,10 +279,10 @@ function TimelineControl(props) {
                     ))}
                 </div>
 
-                {/* Collapse (⏳) / play-again (↻) / exit (✕) cluster. The
-                    hourglass here acts as a collapse toggle back to the
-                    minimized view. */}
-                {iconCluster}
+                {/* Collapse (clock) / play-again (replay) / exit (close) FAB
+                    cluster. The clock here acts as a collapse toggle back to the
+                    minimized view (rendered .active to signal "expanded"). */}
+                {fabCluster}
             </div>
 
             <div className="timeline-control-row timeline-control-row-secondary">
