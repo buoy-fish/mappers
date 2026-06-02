@@ -34,7 +34,10 @@ defmodule Mappers.UplinksHeard do
         |> Map.put(:uplink_id, uplink_id)
       end)
 
-    task_results = insert_uplinks_heard(uplinks_heard)
+    # insert_uplinks_heard/1 returns a lazy Task.async_stream; materialize it
+    # to a list so we can both split it and take its length below. (length/1
+    # on the bare stream raises ArgumentError.)
+    task_results = insert_uplinks_heard(uplinks_heard) |> Enum.to_list()
 
     # Each task result is {:ok, {:ok, schema}} on insert success or
     # {:ok, {:error, changeset}} on changeset/insert failure. The original
