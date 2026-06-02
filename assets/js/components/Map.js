@@ -269,6 +269,10 @@ function Map(props) {
     // domain changes (e.g. data arrives after entering the mode).
     React.useEffect(() => {
         if (!timelineMode) return;
+        // During an auto-play launch (every project ▶ Timeline entry) the blank
+        // init in onRunProjectTimeline + the auto-play effect own the lifecycle.
+        // Skip this effect so it can't flash full coverage before the bloom.
+        if (autoPlayPending) return;
         const { minT, maxT } = timeDomain;
         if (minT === null || maxT === null) return;
         const start = startOfLocalDay(minT);
@@ -277,7 +281,7 @@ function Map(props) {
         setRangeEnd(end);
         setCursor(end);
         setPlaying(false);
-    }, [timelineMode, timeDomain]);
+    }, [timelineMode, timeDomain, autoPlayPending]);
 
     // Animation loop. rAF with a timestamp delta (no 60fps assumption). A full
     // sweep of the selected range takes TIMELINE_SWEEP_MS / speed; on reaching
@@ -412,9 +416,14 @@ function Map(props) {
         ['>=', ['get', 'first_seen'], rangeStart],
         ['<=', ['get', 'first_seen'], cursor]
     ]), [rangeStart, cursor]);
-    const timelineBaselineFilter = React.useMemo(() => ([
-        '<', ['get', 'first_seen'], rangeStart
-    ]), [rangeStart]);
+    // When showBaseline is off, gate the (always-mounted) baseline layer with a
+    // match-nothing filter instead of unmounting it. first_seen is always a
+    // positive epoch-ms, so == -1 never matches → nothing drawn.
+    const timelineBaselineFilter = React.useMemo(() => (
+        showBaseline
+            ? ['<', ['get', 'first_seen'], rangeStart]
+            : ['==', ['get', 'first_seen'], -1]
+    ), [showBaseline, rangeStart]);
     // Dark/light satellite toggle. Default true (dark) so first-time visitors
     // see the visually punchy treatment that lets coverage hexes pop. Persisted
     // per-browser via localStorage so users keep their preference across visits.
@@ -858,6 +867,16 @@ function Map(props) {
         }));
         setTimelineMode(true);
         setAutoPlayPending(true);
+        // Start BLANK synchronously so timeline mode mounts with no hexes drawn.
+        // With range 0..0 and cursor 0, the reveal filter (first_seen in [0,0])
+        // and the baseline filter (first_seen < 0) both match nothing (hexes are
+        // positive epoch-ms) → blank map the instant the layers mount. The
+        // auto-play effect then computes the real window ~1s later and fills the
+        // bloom in from blank, avoiding the old full→blank→fill flash.
+        setRangeStart(0);
+        setRangeEnd(0);
+        setCursor(0);
+        setPlaying(false);
     }, []);
 
     // Replay the current range from its start (used by the ↻ button in the
@@ -910,18 +929,23 @@ function Map(props) {
                     position="top-right"
                 />
                 <NavigationControl position="top-right" />
-                {/* Two render paths. In timeline mode we mount the static
+                {/* Two render paths. In timeline mode we feed the static
                     historical-coverage source and suppress both live sources;
-                    otherwise we render the live sources exactly as before. */}
-                {timelineMode &&
-                    <Source id="timeline" type="geojson" data={timelineGeoJson}>
-                        {/* Baseline declared FIRST so the bloom paints on top. */}
-                        {showBaseline &&
-                            <Layer {...timelineBaselineLayer} filter={timelineBaselineFilter} />
-                        }
-                        <Layer {...timelineRevealLayer} filter={timelineRevealFilter} />
-                    </Source>
-                }
+                    otherwise we render the live sources exactly as before.
+
+                    The timeline Source + BOTH Layers are ALWAYS mounted (never
+                    conditionally rendered) — react-map-gl's Layer does a setState
+                    on unmount, which fired a "state update on unmounted
+                    component" warning when exiting timeline mode. We gate them by
+                    DATA/FILTER instead: empty FeatureCollection when not in
+                    timeline mode (nothing drawn, clicks pass through), and the
+                    baseline layer is shown/hidden via a match-nothing filter
+                    rather than unmounting. */}
+                <Source id="timeline" type="geojson" data={timelineMode ? timelineGeoJson : emptyFC}>
+                    {/* Baseline declared FIRST so the bloom paints on top. */}
+                    <Layer {...timelineBaselineLayer} filter={timelineBaselineFilter} />
+                    <Layer {...timelineRevealLayer} filter={timelineRevealFilter} />
+                </Source>
                 {!timelineMode && !hideCoverage &&
                     <Source id="uplink-tileserver" type="geojson" data={hexGeoJson}>
                         <Layer {...uplinkTileServerLayer} />
