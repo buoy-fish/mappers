@@ -563,6 +563,7 @@ function Map(props) {
                         gateway_eui: gw.gateway_eui,
                         name: gw.hotspot_name || gw.gateway_eui,
                         last_heard: gw.last_heard ?? null,
+                        installed_at: gw.installed_at ?? null,
                         role: gw.role ?? null,
                         description: gw.description ?? null,
                         altitude: gw.altitude ?? null,

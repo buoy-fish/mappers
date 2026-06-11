@@ -44,7 +44,10 @@ defmodule Mappers.Gateways do
       # nil on older API versions, which every consumer below tolerates).
       helium_pubkey: g["helium_pubkey"],
       helium_animal_name: g["helium_animal_name"],
-      mesh_relay_id: g["mesh_relay_id"]
+      mesh_relay_id: g["mesh_relay_id"],
+      # Inventory registration time (app.buoy.fish PR #162) — shown as
+      # "Installed" in the gateway tooltip.
+      installed_at: g["installed_at"]
     }
   end
 

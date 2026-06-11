@@ -182,6 +182,17 @@ defmodule Mappers.GatewaysTest do
     assert gw.mesh_relay_id == "0a1b2c3d"
   end
 
+  test "from_inventory/1 passes installed_at through" do
+    gw =
+      Gateways.from_inventory(%{
+        "gateway_eui" => "0016c001f139a5eb",
+        "name" => "Punta Eugenia Town",
+        "installed_at" => "2026-04-02T18:21:09"
+      })
+
+    assert gw.installed_at == "2026-04-02T18:21:09"
+  end
+
   test "attach_last_heard/1 matches uplinks heard under the helium pubkey" do
     insert_heard!("13dkndVT8mHEEjrmCcWkrXJh8X7JzS3uW7Sk6Z7LXBoVhWGqF", ~U[2026-06-08 12:00:00.000000Z])
 
