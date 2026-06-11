@@ -158,7 +158,10 @@ function InfoPane(props) {
             <div className={classNames("pane-nav", {
                  "has-subcontent": showLegendPane || showProjectsPane || props.showHexPane
             })}>
-                <span className="mappers-logo" style={{fontSize: '1.25rem', fontWeight: 700, letterSpacing: '-0.01em'}}>Buoy.Fish Coverage</span>
+                <div className="brand">
+                    <img className="brand-logo" src="/images/logo-buoy-fish.svg" alt="Buoy.Fish" />
+                    <span className="brand-sub">Coverage</span>
+                </div>
                 <ul className="nav-links">
                     <li className="nav-link">
                         <button onClick={onLegendClick}>Legend</button>
@@ -166,10 +169,11 @@ function InfoPane(props) {
                     <li className="nav-link">
                         <button onClick={onProjectsClick}>Projects</button>
                     </li>
-                    <li className="nav-link">
+                    {/* External link-outs are desktop-only; hidden on mobile via .nav-link-external */}
+                    <li className="nav-link nav-link-external">
                         <a href="https://buoy.fish" target="_blank">Buoy.Fish</a>
                     </li>
-                    <li className="nav-link">
+                    <li className="nav-link nav-link-external">
                         <a href="https://github.com/buoy-fish/mappers" target="_blank">GitHub</a>
                     </li>
                 </ul>
