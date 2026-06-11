@@ -60,7 +60,7 @@ defmodule MappersWeb.API.V1.GatewayController do
   defp parse_body(body) do
     case Jason.decode(body) do
       {:ok, %{"data" => gateways}} when is_list(gateways) ->
-        {:ok, Enum.map(gateways, &map_gateway/1)}
+        {:ok, Enum.map(gateways, &Gateways.from_inventory/1)}
 
       {:ok, _} ->
         {:error, :unexpected_response_shape}
@@ -68,19 +68,6 @@ defmodule MappersWeb.API.V1.GatewayController do
       {:error, reason} ->
         {:error, {:json_decode, reason}}
     end
-  end
-
-  defp map_gateway(g) do
-    %{
-      gateway_eui: g["gateway_eui"],
-      concentrator_ids: g["concentrator_ids"] || [],
-      hotspot_name: g["name"],
-      lat: g["latitude"],
-      lng: g["longitude"],
-      role: g["role"],
-      description: g["description"],
-      altitude: g["altitude"]
-    }
   end
 
   defp fetch_from_uplinks_heard do
