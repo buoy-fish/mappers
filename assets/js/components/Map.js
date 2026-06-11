@@ -6,12 +6,15 @@ import { useState, useRef, useCallback } from 'react';
 // complexity. Source / Layer / GeolocateControl / NavigationControl are shape-
 // identical between the two submodules — they're generic wrappers around the
 // same Style Spec — so we import them from /maplibre by convention.
+// Popup is NOT generic — it instantiates the GL library's own Popup class —
+// so, like Map, it must come from the submodule matching the active renderer.
 // react-map-gl 7.1 layout: default export is Mapbox-bound, `/maplibre` is MapLibre-bound.
-import { Map as MapboxMap } from 'react-map-gl';
-import { Map as MaplibreMap, Source, Layer, GeolocateControl, NavigationControl } from 'react-map-gl/maplibre';
+import { Map as MapboxMap, Popup as MapboxPopup } from 'react-map-gl';
+import { Map as MaplibreMap, Source, Layer, GeolocateControl, NavigationControl, Popup as MaplibrePopup } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import InfoPane from "../components/InfoPane"
+import GatewayTooltip from "../components/GatewayTooltip"
 import WelcomeModal from "../components/WelcomeModal"
 import TimelineControl, { startOfLocalDay, endOfLocalDay } from "../components/TimelineControl"
 import { uplinkTileServerLayer, uplinkHotspotsLineLayer, uplinkRelayLineLayer, uplinkHotspotsCircleLayer, uplinkHotspotsHexLayer, uplinkChannelLayer, gatewayMarkerLayer, gatewayLabelLayer, selectedHexLayer, timelineRevealLayer, timelineBaselineLayer } from './Layers.js';
@@ -54,6 +57,7 @@ const MAP_STYLES = {
 
 const MAP_STYLE = USE_MAPBOX ? MAP_STYLES.mapbox : MAP_STYLES.carto;
 const MapGL = USE_MAPBOX ? MapboxMap : MaplibreMap;
+const PopupGL = USE_MAPBOX ? MapboxPopup : MaplibrePopup;
 
 // Dark / desaturated raster treatment applied at runtime to the satellite
 // imagery layers, mimicking upstream Helium Mappers' look (whose effect lives
@@ -235,6 +239,77 @@ function Map(props) {
     const [gatewayRecords, setGatewayRecords] = useState({});
     const [showGateways, setShowGateways] = useState(false);
     const [hideCoverage, setHideCoverage] = useState(false);
+    // ------------------------------------------------------------------
+    // Gateway marker tooltip. Desktop: lingering hover (300ms) or click;
+    // touch: long-press (500ms). A hover-opened popup is transient (clears
+    // when the pointer leaves the marker); click/long-press pins it until
+    // it's explicitly closed or the map is clicked elsewhere.
+    // ------------------------------------------------------------------
+    const [gatewayPopup, setGatewayPopup] = useState(null); // { lng, lat, gw, pinned }
+    const gwHoverTimerRef = useRef(null);
+    const gwLongPressTimerRef = useRef(null);
+    const gwHoveredEuiRef = useRef(null);
+
+    // Pull the gateway feature (if any) out of an interactive-layer event and
+    // normalize its properties. queryRenderedFeatures JSON-stringifies array
+    // property values, so concentrator_ids comes back as a string.
+    const gatewayFromEvent = (event) => {
+        const f = (event.features || []).find(ft => ft.layer && ft.layer.id === 'gatewayMarkerLayer');
+        if (!f) return null;
+        const gw = { ...f.properties };
+        if (typeof gw.concentrator_ids === 'string') {
+            try { gw.concentrator_ids = JSON.parse(gw.concentrator_ids); }
+            catch (_) { gw.concentrator_ids = []; }
+        }
+        const [lng, lat] = f.geometry.coordinates;
+        return { lng, lat, gw };
+    };
+
+    // Hover handling is driven from onMouseMove rather than onMouseEnter /
+    // onMouseLeave: gateways usually sit ON TOP of coverage hexes, which are
+    // also interactive layers, so enter/leave (which fire on the union of all
+    // interactive features) never fire when sliding from hex onto marker.
+    const onMouseMove = useCallback(event => {
+        const canvas = mapRef.current?.getMap()?.getCanvas();
+        const gwHit = gatewayFromEvent(event);
+        if (gwHit) {
+            if (canvas) canvas.style.cursor = 'pointer';
+            if (gwHoveredEuiRef.current !== gwHit.gw.gateway_eui) {
+                gwHoveredEuiRef.current = gwHit.gw.gateway_eui;
+                clearTimeout(gwHoverTimerRef.current);
+                gwHoverTimerRef.current = setTimeout(() => {
+                    // Never downgrade a pinned popup to a transient one.
+                    setGatewayPopup(p => (p && p.pinned ? p : { ...gwHit, pinned: false }));
+                }, 300);
+            }
+        } else {
+            if (canvas) canvas.style.cursor = '';
+            if (gwHoveredEuiRef.current !== null) {
+                gwHoveredEuiRef.current = null;
+                clearTimeout(gwHoverTimerRef.current);
+                setGatewayPopup(p => (p && !p.pinned ? null : p));
+            }
+        }
+    }, []);
+
+    const onTouchStart = useCallback(event => {
+        clearTimeout(gwLongPressTimerRef.current);
+        const gwHit = gatewayFromEvent(event);
+        if (!gwHit) return;
+        gwLongPressTimerRef.current = setTimeout(() => {
+            setGatewayPopup({ ...gwHit, pinned: true });
+        }, 500);
+    }, []);
+    // Any movement / release before the long-press fires cancels it (a moving
+    // finger is a pan, a quick release is a tap — onClick handles the tap).
+    const cancelGwLongPress = useCallback(() => clearTimeout(gwLongPressTimerRef.current), []);
+
+    // Tidy up: no orphaned popup when the layer is toggled off, no timers on unmount.
+    React.useEffect(() => { if (!showGateways) setGatewayPopup(null); }, [showGateways]);
+    React.useEffect(() => () => {
+        clearTimeout(gwHoverTimerRef.current);
+        clearTimeout(gwLongPressTimerRef.current);
+    }, []);
     // Timeline mode: when on, we mount a separate static render path showing
     // all confirmed-coverage hexes (fetched from /api/v1/coverage/timeline) and
     // suppress the live uplink-tileserver / uplink-channel sources. The live
@@ -487,7 +562,11 @@ function Map(props) {
                     properties: {
                         gateway_eui: gw.gateway_eui,
                         name: gw.hotspot_name || gw.gateway_eui,
-                        last_heard: gw.last_heard
+                        last_heard: gw.last_heard ?? null,
+                        role: gw.role ?? null,
+                        description: gw.description ?? null,
+                        altitude: gw.altitude ?? null,
+                        concentrator_ids: gw.concentrator_ids || []
                     }
                 }));
                 setGatewayGeoJson({ type: "FeatureCollection", features });
@@ -741,6 +820,17 @@ function Map(props) {
         const features = event.features;
         const map = mapRef.current?.getMap();
         if (!map) return;
+        // A gateway marker swallows the click: show its tooltip (pinned)
+        // instead of selecting the coverage hex underneath. Always open —
+        // never toggle — so the synthetic click that follows a touch
+        // long-press doesn't immediately close the popup it just opened.
+        const gwHit = gatewayFromEvent(event);
+        if (gwHit) {
+            clearTimeout(gwHoverTimerRef.current);
+            setGatewayPopup({ ...gwHit, pinned: true });
+            return;
+        }
+        setGatewayPopup(null);
         setShowHexPaneCloseButton(false);
         if (features) {
             features.forEach(feature => {
@@ -986,7 +1076,7 @@ function Map(props) {
         applySatelliteTreatment(map, darkSatellite ? SATELLITE_DARK_TREATMENT : SATELLITE_LIGHT_TREATMENT);
     }, [darkSatellite]);
 
-    const interactiveLayerIds = ['public.h3_res9', 'uplinkChannelLayer', 'timelineRevealLayer', 'timelineBaselineLayer'];
+    const interactiveLayerIds = ['public.h3_res9', 'uplinkChannelLayer', 'timelineRevealLayer', 'timelineBaselineLayer', 'gatewayMarkerLayer'];
 
     return (
         <div className='map-container'>
@@ -997,6 +1087,11 @@ function Map(props) {
                 mapStyle={MAP_STYLE}
                 mapboxAccessToken={USE_MAPBOX ? MAPBOX_TOKEN : undefined}
                 onClick={onClick}
+                onMouseMove={onMouseMove}
+                onTouchStart={onTouchStart}
+                onTouchEnd={cancelGwLongPress}
+                onTouchMove={cancelGwLongPress}
+                onTouchCancel={cancelGwLongPress}
                 onLoad={USE_MAPBOX ? (e) => {
                     // Belt-and-suspenders: in the rare case the
                     // ref-callback-attached `style.load` listener (in
@@ -1064,6 +1159,20 @@ function Map(props) {
                         <Layer {...gatewayMarkerLayer} />
                         <Layer {...gatewayLabelLayer} />
                     </Source>
+                }
+                {gatewayPopup &&
+                    <PopupGL
+                        longitude={gatewayPopup.lng}
+                        latitude={gatewayPopup.lat}
+                        anchor="bottom"
+                        offset={14}
+                        closeButton={false}
+                        closeOnClick={false}
+                        maxWidth="320px"
+                        className="gateway-popup"
+                    >
+                        <GatewayTooltip gw={gatewayPopup.gw} onClose={() => setGatewayPopup(null)} />
+                    </PopupGL>
                 }
 
             </MapGL>

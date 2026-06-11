@@ -16,6 +16,7 @@ defmodule MappersWeb.API.V1.GatewayController do
   require Logger
 
   import Ecto.Query
+  alias Mappers.Gateways
   alias Mappers.Repo
   alias Mappers.UplinksHeards.UplinkHeard
 
@@ -24,7 +25,9 @@ defmodule MappersWeb.API.V1.GatewayController do
   def index(conn, _params) do
     case fetch_from_app_buoy() do
       {:ok, gateways} ->
-        json(conn, %{gateways: gateways})
+        # The inventory knows where a gateway SHOULD be, but not whether it's
+        # alive — last_heard comes from our own uplinks_heard observations.
+        json(conn, %{gateways: Gateways.attach_last_heard(gateways)})
 
       {:error, reason} ->
         Logger.warning(

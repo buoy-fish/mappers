@@ -84,8 +84,29 @@ body {
 
   max-width: 36rem;
 }
-.mappers-logo {
-  fill: white;
+/* Brand lockup: buoy.fish logo with a letterspaced 'Coverage' subline.
+   The logo SVG carries its own orange wordmark; the subline stays white. */
+.brand {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3125rem;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.brand-logo {
+  display: block;
+  height: 2.25rem;
+  width: auto;
+}
+.brand-sub {
+  color: #fff;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  opacity: 0.92;
+  margin-left: 0.125rem;
 }
 .pane-nav {
   display: flex;
@@ -452,6 +473,167 @@ body {
 }
 /*end gateway toggle*/
 
+/*start gateway tooltip*/
+/* Frosted dark card matching .info-pane / .timeline-control. The GL library
+   injects its own popup chrome (.maplibregl-* on the CARTO fallback,
+   .mapboxgl-* on the satellite basemap) — restyle both.
+
+   IMPORTANT: these rules are fully self-contained, INCLUDING the library's
+   base popup layout (position/flex/pointer-events/tip triangle). The page
+   only links css/app.css; the maplibre-gl.css / mapbox-gl.css imported from
+   Map.js end up in js/app.css, which the layout never loads — so without the
+   base rules here the popup lands in document flow with pointer-events:auto
+   and silently swallows every map click. */
+.gateway-popup {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  will-change: transform;
+  pointer-events: none;
+  z-index: 4;
+}
+.gateway-popup.maplibregl-popup-anchor-bottom,
+.gateway-popup.mapboxgl-popup-anchor-bottom {
+  flex-direction: column-reverse;
+}
+.gateway-popup.maplibregl-popup-anchor-top,
+.gateway-popup.mapboxgl-popup-anchor-top {
+  flex-direction: column;
+}
+.gateway-popup .maplibregl-popup-content,
+.gateway-popup .mapboxgl-popup-content {
+  pointer-events: auto;
+  padding: 0;
+  background: rgba(22, 23, 29, 0.92);
+  -webkit-backdrop-filter: saturate(180%) blur(10px);
+  backdrop-filter: saturate(180%) blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  color: #fff;
+}
+/* Anchor tips are CSS-border triangles tinted to match the card. */
+.gateway-popup .maplibregl-popup-tip,
+.gateway-popup .mapboxgl-popup-tip {
+  width: 0;
+  height: 0;
+  border: 10px solid transparent;
+  align-self: center;
+  z-index: 1;
+}
+.gateway-popup.maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+.gateway-popup.mapboxgl-popup-anchor-bottom .mapboxgl-popup-tip {
+  border-bottom: none;
+  border-top-color: rgba(22, 23, 29, 0.92);
+}
+.gateway-popup.maplibregl-popup-anchor-top .maplibregl-popup-tip,
+.gateway-popup.mapboxgl-popup-anchor-top .mapboxgl-popup-tip {
+  border-top: none;
+  border-bottom-color: rgba(22, 23, 29, 0.92);
+}
+.gateway-card {
+  min-width: 230px;
+  padding: 0.875rem 1rem;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 0.8125rem;
+}
+.gateway-card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.625rem;
+}
+/* Liveness dot: orange when heard within the last 24h, dim gray otherwise. */
+.gateway-card-status {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+}
+.gateway-card-status.fresh {
+  background: #FF9800;
+  box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.22);
+}
+.gateway-card-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+.gateway-card-role {
+  flex: 0 0 auto;
+  padding: 0.125rem 0.375rem;
+  border: 1px solid rgba(255, 152, 0, 0.5);
+  border-radius: 4px;
+  color: #FF9800;
+  font-size: 0.5625rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.gateway-card-close {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 1.375rem;
+  height: 1.375rem;
+  padding: 0;
+  margin-right: -0.25rem;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  fill: white;
+  opacity: 0.7;
+  cursor: pointer;
+}
+.gateway-card-close:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.1);
+}
+.gateway-card-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4375rem;
+  margin: 0;
+}
+.gateway-card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+}
+.gateway-card-row dt {
+  color: rgba(255, 255, 255, 0.55);
+}
+.gateway-card-row dd {
+  margin: 0;
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.gateway-card-fresh {
+  color: #FF9800;
+  font-weight: 600;
+}
+.gateway-card-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.02em;
+  opacity: 0.9;
+}
+.gateway-card-desc {
+  margin: 0.625rem 0 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+/*end gateway tooltip*/
+
 /** end main stats stuff **/
 
 /** start timeline control **/
@@ -755,6 +937,34 @@ body {
     position: fixed;
     top: 4rem;
     padding: 0 1rem;
+  }
+  /* Projects mirrors the Legend's mobile treatment: a fixed sheet pinned
+     beneath the nav (the desktop pane lives inside .info-pane, which becomes
+     display:contents on mobile — without this rule the list rendered
+     unpositioned and invisible behind the map). */
+  .projects-pane {
+    position: fixed;
+    top: 4rem;
+    left: 0;
+    right: 0;
+    padding: 0 1rem;
+    max-height: calc(100vh - 5rem);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* External link-outs (buoy.fish / GitHub) are desktop-only. */
+  .nav-link-external {
+    display: none;
+  }
+  .brand {
+    gap: 0.1875rem;
+  }
+  .brand-logo {
+    height: 1.625rem;
+  }
+  .brand-sub {
+    font-size: 0.5625rem;
+    letter-spacing: 0.26em;
   }
   .info-pane {
     /*allows us to split the div to top/bottom*/
