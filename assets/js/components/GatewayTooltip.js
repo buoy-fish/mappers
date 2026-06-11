@@ -17,17 +17,26 @@ function lastHeardInfo(lastHeard) {
     };
 }
 
+// "April 2, 2026" from an ISO date(-time) string, or null when absent/invalid.
+function installedLabel(installedAt) {
+    if (!installedAt) return null;
+    const date = parseISO(installedAt);
+    if (isNaN(date.getTime())) return null;
+    return date.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+}
+
 // Tooltip body for a gateway marker. Pure presentational — Map.js owns the
 // Popup wrapper and the show/hide interaction (hover/click on desktop,
 // long-press on touch). `gw` carries the marker's feature properties:
-// { name, gateway_eui, last_heard, role, description, altitude, concentrator_ids }
-// — everything but name/gateway_eui may be missing (the degraded uplinks_heard
-// fallback path has no role/altitude/concentrators), so each row renders only
-// when its datum exists.
+// { name, last_heard, installed_at, role, description, altitude } — everything
+// but name may be missing (the degraded uplinks_heard fallback path has no
+// role/altitude/installed_at), so each row renders only when its datum exists.
+// Identifier internals (EUI, concentrator GWIDs) are deliberately NOT shown —
+// they drive the identity matching but aren't operator-relevant at a glance.
 function GatewayTooltip(props) {
     const gw = props.gw;
     const heard = lastHeardInfo(gw.last_heard);
-    const concentrators = Array.isArray(gw.concentrator_ids) ? gw.concentrator_ids.filter(Boolean) : [];
+    const installed = installedLabel(gw.installed_at);
 
     return (
         <div className="gateway-card">
@@ -46,24 +55,16 @@ function GatewayTooltip(props) {
                     <dt className="type-smallcap">Last heard</dt>
                     <dd className={heard.fresh ? "gateway-card-fresh" : ""} title={heard.exact || undefined}>{heard.label}</dd>
                 </div>
-                {gw.gateway_eui &&
+                {installed &&
                     <div className="gateway-card-row">
-                        <dt className="type-smallcap">Gateway EUI</dt>
-                        <dd className="gateway-card-mono">{gw.gateway_eui}</dd>
+                        <dt className="type-smallcap">Installed</dt>
+                        <dd>{installed}</dd>
                     </div>
                 }
                 {gw.altitude != null &&
                     <div className="gateway-card-row">
                         <dt className="type-smallcap">Altitude</dt>
                         <dd>{gw.altitude}<span className="stat-unit"> m</span></dd>
-                    </div>
-                }
-                {concentrators.length > 0 &&
-                    <div className="gateway-card-row">
-                        <dt className="type-smallcap">Concentrators</dt>
-                        <dd className="gateway-card-mono">
-                            {concentrators.map(cid => <div key={cid}>{cid}</div>)}
-                        </dd>
                     </div>
                 }
             </dl>

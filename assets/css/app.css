@@ -676,12 +676,6 @@ body {
   color: #FF9800;
   font-weight: 600;
 }
-.gateway-card-mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.6875rem;
-  letter-spacing: 0.02em;
-  opacity: 0.9;
-}
 .gateway-card-desc {
   margin: 0.625rem 0 0;
   color: rgba(255, 255, 255, 0.7);
