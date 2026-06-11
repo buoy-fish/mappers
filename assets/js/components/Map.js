@@ -1176,7 +1176,33 @@ function Map(props) {
                 }
 
             </MapGL>
-            <InfoPane hexId={hexId} bestRssi={bestRssi} snr={snr} uplinks={uplinks} gatewayRecords={gatewayRecords} showHexPane={showHexPane} onCloseHexPaneClick={onCloseHexPaneClick} showHexPaneCloseButton={showHexPaneCloseButton} showGateways={showGateways} onToggleGateways={() => setShowGateways(!showGateways)} hideCoverage={hideCoverage} onToggleCoverage={() => setHideCoverage(!hideCoverage)} onFlyToProject={onFlyToProject} onRunProjectTimeline={onRunProjectTimeline} darkSatellite={darkSatellite} onToggleDarkSatellite={USE_MAPBOX ? () => setDarkSatellite(!darkSatellite) : null} />
+            <InfoPane hexId={hexId} bestRssi={bestRssi} snr={snr} uplinks={uplinks} gatewayRecords={gatewayRecords} showHexPane={showHexPane} onCloseHexPaneClick={onCloseHexPaneClick} showHexPaneCloseButton={showHexPaneCloseButton} showGateways={showGateways} onToggleGateways={() => setShowGateways(!showGateways)} hideCoverage={hideCoverage} onToggleCoverage={() => setHideCoverage(!hideCoverage)} onFlyToProject={onFlyToProject} onRunProjectTimeline={onRunProjectTimeline} />
+            {/* Floating light/dark satellite toggle, top-center of the free map
+                area — mirrors app.buoy.fish's MapOverlayControls theme button.
+                Shows the mode you'd switch TO (sun while dark, moon while
+                light). Only rendered on the Mapbox basemap; the CARTO fallback
+                has no raster layers to treat. */}
+            {USE_MAPBOX &&
+                <button
+                    className={"theme-toggle " + (darkSatellite ? "theme-toggle-dark" : "theme-toggle-light")}
+                    onClick={() => setDarkSatellite(!darkSatellite)}
+                    aria-label={darkSatellite ? "Switch to light satellite" : "Switch to dark satellite"}
+                    title={darkSatellite ? "Switch to light satellite" : "Switch to dark satellite"}
+                >
+                    {darkSatellite
+                        ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
+                              <circle cx="12" cy="12" r="4" />
+                              <path d="M12 2v2" /><path d="M12 20v2" />
+                              <path d="m4.93 4.93 1.41 1.41" /><path d="m17.66 17.66 1.41 1.41" />
+                              <path d="M2 12h2" /><path d="M20 12h2" />
+                              <path d="m6.34 17.66-1.41 1.41" /><path d="m19.07 4.93-1.41 1.41" />
+                          </svg>
+                        : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+                          </svg>
+                    }
+                </button>
+            }
             {timelineMode && timeDomain.minT !== null && timeDomain.maxT !== null &&
                 <TimelineControl
                     minT={timeDomain.minT}

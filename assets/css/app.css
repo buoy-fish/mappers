@@ -473,6 +473,62 @@ body {
 }
 /*end gateway toggle*/
 
+/*start theme toggle*/
+/* Floating light/dark satellite toggle, top-center of the free map area —
+   mirrors app.buoy.fish's MapOverlayControls theme button, translated into
+   this app's design language (frosted dark + Buoy.Fish orange; see
+   .timeline-fab). Desktop centers it in the map space RIGHT of the info
+   pane (left 2vw + 36rem wide), so it never collides with the nav:
+   left = panelRight + (100vw - panelRight) / 2 = 51vw + 18rem. */
+.theme-toggle {
+  position: fixed;
+  top: 0.75rem;
+  left: calc(51vw + 18rem);
+  transform: translateX(-50%);
+  z-index: 6;
+
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  cursor: pointer;
+
+  transition: background .2s ease, color .2s ease, border-color .2s ease,
+              box-shadow .2s ease, transform .12s ease;
+}
+.theme-toggle svg { display: block; }
+.theme-toggle:active {
+  transform: translateX(-50%) scale(0.94);
+}
+/* Dark satellite active: frosted-transparent square, glowing orange sun. */
+.theme-toggle-dark {
+  background: rgba(18, 18, 22, 0.42);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #FF9800;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.40);
+}
+.theme-toggle-dark:hover {
+  border-color: rgba(255, 152, 0, 0.60);
+  box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.14), 0 6px 22px rgba(0, 0, 0, 0.50);
+}
+/* Light satellite active: floating light card with a slate moon. */
+.theme-toggle-light {
+  background: #f1f3f5;
+  border-color: rgba(15, 23, 42, 0.08);
+  color: #3f4753;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22);
+}
+.theme-toggle-light:hover {
+  background: #e6e9ed;
+  color: #1f2630;
+}
+/*end theme toggle*/
+
 /*start gateway tooltip*/
 /* Frosted dark card matching .info-pane / .timeline-control. The GL library
    injects its own popup chrome (.maplibregl-* on the CARTO fallback,
@@ -955,6 +1011,20 @@ body {
   /* External link-outs (buoy.fish / GitHub) are desktop-only. */
   .nav-link-external {
     display: none;
+  }
+  /* On mobile these pills sit directly on the map (no frosted info-pane
+     behind them) — the desktop 10%-white wash is illegible over bright
+     satellite imagery, so swap to the frosted-dark chip used elsewhere. */
+  .legend-line,
+  .project-item,
+  .project-timeline-btn {
+    background: rgba(22, 23, 29, 0.72);
+    -webkit-backdrop-filter: saturate(180%) blur(10px);
+    backdrop-filter: saturate(180%) blur(10px);
+  }
+  .theme-toggle {
+    left: 50%;
+    top: 0.625rem;
   }
   .brand {
     gap: 0.1875rem;
