@@ -166,4 +166,64 @@ defmodule Mappers.GatewaysTest do
 
     assert gw.concentrator_ids == ["646cb99320d8e64b"]
   end
+
+  test "from_inventory/1 captures the helium and mesh identifiers" do
+    gw =
+      Gateways.from_inventory(%{
+        "gateway_eui" => "af8b2c69cdfc5384",
+        "name" => "Lone Walnut Halibut",
+        "helium_pubkey" => "13dkndVT8mHEEjrmCcWkrXJh8X7JzS3uW7Sk6Z7LXBoVhWGqF",
+        "helium_animal_name" => "lone-walnut-halibut",
+        "mesh_relay_id" => "0a1b2c3d"
+      })
+
+    assert gw.helium_pubkey == "13dkndVT8mHEEjrmCcWkrXJh8X7JzS3uW7Sk6Z7LXBoVhWGqF"
+    assert gw.helium_animal_name == "lone-walnut-halibut"
+    assert gw.mesh_relay_id == "0a1b2c3d"
+  end
+
+  test "attach_last_heard/1 matches uplinks heard under the helium pubkey" do
+    insert_heard!("13dkndVT8mHEEjrmCcWkrXJh8X7JzS3uW7Sk6Z7LXBoVhWGqF", ~U[2026-06-08 12:00:00.000000Z])
+
+    [gw] =
+      Gateways.attach_last_heard([
+        inventory_gateway(%{
+          gateway_eui: "AAAAAAAA00000002",
+          helium_pubkey: "13dkndVT8mHEEjrmCcWkrXJh8X7JzS3uW7Sk6Z7LXBoVhWGqF"
+        })
+      ])
+
+    assert gw.last_heard == ~U[2026-06-08 12:00:00.000000Z]
+  end
+
+  test "attach_last_heard/1 matches the helium animal name against hotspot_name" do
+    insert_heard!("912aa4fcd3e993bc", ~U[2026-06-06 12:00:00.000000Z], "quiet-pine-squid")
+
+    [gw] =
+      Gateways.attach_last_heard([
+        inventory_gateway(%{
+          gateway_eui: "AAAAAAAA00000003",
+          hotspot_name: "Some Operator Label",
+          helium_animal_name: "Quiet Pine Squid"
+        })
+      ])
+
+    assert gw.last_heard == ~U[2026-06-06 12:00:00.000000Z]
+  end
+
+  # Mesh uplinks reach the LNS under a 16-hex virtual GWID of the form
+  # <mesh_prefix><mesh_relay_id>; the prefix lives in the GWMP, so the relay
+  # row is canonicalized by 8-hex suffix.
+  test "attach_last_heard/1 matches mesh uplinks by mesh_relay_id suffix" do
+    insert_heard!("AB12CD340A1B2C3D", ~U[2026-06-05 12:00:00.000000Z])
+    # A non-16-char stream ID with the same trailing 8 chars must NOT match.
+    insert_heard!("notsixteenchars0a1b2c3d", ~U[2026-06-10 12:00:00.000000Z])
+
+    [gw] =
+      Gateways.attach_last_heard([
+        inventory_gateway(%{gateway_eui: "AAAAAAAA00000004", mesh_relay_id: "0a1b2c3d"})
+      ])
+
+    assert gw.last_heard == ~U[2026-06-05 12:00:00.000000Z]
+  end
 end

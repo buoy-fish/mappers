@@ -39,7 +39,12 @@ defmodule Mappers.Gateways do
       lng: g["longitude"],
       role: g["role"],
       description: g["description"],
-      altitude: g["altitude"]
+      altitude: g["altitude"],
+      # Helium / mesh identities (exposed by app.buoy.fish since PR #161;
+      # nil on older API versions, which every consumer below tolerates).
+      helium_pubkey: g["helium_pubkey"],
+      helium_animal_name: g["helium_animal_name"],
+      mesh_relay_id: g["mesh_relay_id"]
     }
   end
 
@@ -47,17 +52,21 @@ defmodule Mappers.Gateways do
   Attach `:last_heard` (the most recent `uplinks_heard.timestamp`, or nil if
   the gateway has never heard an uplink) to each inventory gateway.
 
-  Two match dimensions, max taken across all hits:
+  Three match dimensions, max taken across all hits:
 
-    * ID: `uplinks_heard.gateway_id` against the hardware EUI and every
-      concentrator GWID, case-insensitively (hex IDs are normalized to
-      lowercase on both sides).
+    * ID: `uplinks_heard.gateway_id` against the hardware EUI, every
+      concentrator GWID, and the Helium pubkey, case-insensitively.
     * Name: `uplinks_heard.hotspot_name` against the gateway's inventory
-      name, normalized (lowercase, `-`/`_` treated as spaces). This is what
-      associates gateways whose stream IDs were never recorded in the
-      inventory, and Helium-routed uplinks stamped with the animal name.
-      A name match only credits rows bearing that name — a stream ID heard
-      under several names over time doesn't leak its other rows.
+      name AND its Helium animal name, normalized (lowercase, `-`/`_`
+      treated as spaces). This is what associates gateways whose stream IDs
+      were never recorded in the inventory, and Helium-routed uplinks
+      stamped with the animal name. A name match only credits rows bearing
+      that name — a stream ID heard under several names over time doesn't
+      leak its other rows.
+    * Mesh suffix: mesh uplinks reach the LNS under a 16-hex virtual GWID
+      `<mesh_prefix><mesh_relay_id>`; the prefix lives in the GWMP, so a
+      relay gateway is canonicalized by matching the trailing 8 hex of
+      16-char stream IDs against its `mesh_relay_id`.
   """
   def attach_last_heard(gateways) do
     ids =
@@ -86,12 +95,24 @@ defmodule Mappers.Gateways do
       |> Enum.group_by(fn {name, _ts} -> normalize_name(name) end, fn {_name, ts} -> ts end)
       |> Map.new(fn {name, timestamps} -> {name, Enum.max(timestamps, DateTime)} end)
 
+    last_heard_by_relay_suffix = relay_suffix_hits(gateways)
+
     Enum.map(gateways, fn gw ->
       id_hits = Enum.map(identifiers(gw), &Map.get(last_heard_by_id, &1))
-      name_hit = Map.get(last_heard_by_name, normalize_name(gw.hotspot_name))
+
+      name_hits =
+        gw
+        |> name_candidates()
+        |> Enum.map(&Map.get(last_heard_by_name, &1))
+
+      relay_hit =
+        case relay_suffix(gw) do
+          nil -> nil
+          suffix -> Map.get(last_heard_by_relay_suffix, suffix)
+        end
 
       last_heard =
-        [name_hit | id_hits]
+        (id_hits ++ name_hits ++ [relay_hit])
         |> Enum.reject(&is_nil/1)
         |> Enum.max(DateTime, fn -> nil end)
 
@@ -100,9 +121,48 @@ defmodule Mappers.Gateways do
   end
 
   defp identifiers(gw) do
-    [gw.gateway_eui | gw.concentrator_ids || []]
+    [gw.gateway_eui, Map.get(gw, :helium_pubkey) | gw.concentrator_ids || []]
     |> Enum.reject(&(&1 in [nil, ""]))
     |> Enum.map(&String.downcase/1)
+  end
+
+  defp name_candidates(gw) do
+    [gw.hotspot_name, Map.get(gw, :helium_animal_name)]
+    |> Enum.map(&normalize_name/1)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+  end
+
+  defp relay_suffix(gw) do
+    case Map.get(gw, :mesh_relay_id) do
+      id when is_binary(id) and id != "" -> String.downcase(id)
+      _ -> nil
+    end
+  end
+
+  # last-heard per 8-hex mesh suffix, considering only 16-char stream IDs
+  # (the virtual-GWID length) so e.g. a base58 pubkey that happens to end in
+  # the same 8 characters can't be miscredited to a relay.
+  defp relay_suffix_hits(gateways) do
+    suffixes =
+      gateways
+      |> Enum.map(&relay_suffix/1)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+
+    if suffixes == [] do
+      %{}
+    else
+      from(uh in UplinkHeard,
+        where:
+          fragment("char_length(?)", uh.gateway_id) == 16 and
+            fragment("right(lower(?), 8)", uh.gateway_id) in ^suffixes,
+        group_by: fragment("right(lower(?), 8)", uh.gateway_id),
+        select: {fragment("right(lower(?), 8)", uh.gateway_id), max(uh.timestamp)}
+      )
+      |> Repo.all()
+      |> Map.new()
+    end
   end
 
   defp normalize_name(nil), do: nil
