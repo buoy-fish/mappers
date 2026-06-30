@@ -10,7 +10,9 @@ import Config
 # which you should run after static files are built and
 # before starting your production server.
 config :mappers, MappersWeb.Endpoint,
-  http: [port: {:system, "PORT"}],
+  # compress: true enables Cowboy's gzip stream handler so dynamic responses
+  # (notably the /api/v1/hexes JSON) are gzipped when the client accepts it.
+  http: [port: {:system, "PORT"}, compress: true],
   url: [scheme: "https", host: "map.buoy.fish", port: 443],
   force_ssl: [rewrite_on: [:x_forwarded_proto]],
   cache_static_manifest: "priv/static/cache_manifest.json"

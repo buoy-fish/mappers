@@ -1,3 +1,10 @@
+/* MapLibre/Mapbox GL control, logo, and attribution styles. Imported HERE (the
+   served stylesheet) rather than in Map.js — JS-side CSS imports land in the
+   unused /js/app.css sidecar and never reach the browser, which is why the
+   logo, attribution, and control buttons were previously unstyled/invisible. */
+@import "maplibre-gl/dist/maplibre-gl.css";
+@import "mapbox-gl/dist/mapbox-gl.css";
+
 html, body {
   margin: 0;
   font-size: 16px;
@@ -254,6 +261,312 @@ body {
 }
 /*end projects dropdown*/
 
+/* start project info card */
+/* Hover-revealed ⓘ between the project name and the ▶ Timeline launcher.
+   Hidden until the row is hovered (or the card is open/focused), so the row
+   stays clean by default. */
+.project-info {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+}
+.project-info-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.project-row:hover .project-info-btn,
+.project-info-btn.active,
+.project-info-btn:focus-visible {
+  opacity: 1;
+}
+.project-info-btn:hover {
+  color: #FF9800;
+  background: rgba(255, 152, 0, 0.12);
+  border-color: rgba(255, 152, 0, 0.35);
+}
+.project-info-btn.active {
+  color: #FF9800;
+  background: rgba(255, 152, 0, 0.14);
+  border-color: rgba(255, 152, 0, 0.5);
+}
+.project-info-glyph {
+  display: block;
+}
+
+/* The pinned/peek popover. Anchored under the ⓘ, right-aligned so it never
+   overflows the panel's right edge. Slightly more opaque than the panel since
+   it overlays the map and the rows beneath it. */
+.project-info-card {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  right: 0;
+  z-index: 20;
+  width: 17rem;
+  padding: 0.85rem 0.9rem 0.9rem;
+  background: rgba(20, 21, 27, 0.94);
+  backdrop-filter: saturate(180%) blur(14px);
+  -webkit-backdrop-filter: saturate(180%) blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  box-shadow: 0 14px 38px rgba(0, 0, 0, 0.5);
+  color: white;
+  cursor: default;
+  animation: pic-in 0.14s ease-out;
+}
+.project-info-card::before {
+  content: "";
+  position: absolute;
+  top: -5px;
+  right: 0.55rem;
+  width: 9px;
+  height: 9px;
+  background: rgba(20, 21, 27, 0.94);
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  transform: rotate(45deg);
+}
+@keyframes pic-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+}
+.pic-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+.pic-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #FF9800;
+}
+.pic-close {
+  flex: 0 0 auto;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  font-size: 0.8rem;
+  line-height: 1;
+  padding: 0.15rem 0.25rem;
+  border-radius: 4px;
+}
+.pic-close:hover {
+  color: white;
+  background: rgba(255, 255, 255, 0.1);
+}
+.pic-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.pic-field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.pic-field-label {
+  flex: 0 0 3.5rem;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.0625rem;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+}
+.pic-field-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.8rem;
+  color: white;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pic-note {
+  margin-left: 0.35rem;
+  font-size: 0.66rem;
+  color: rgba(255, 255, 255, 0.4);
+}
+.pic-copy {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.55rem;
+  height: 1.55rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.pic-copy:hover {
+  color: #FF9800;
+  border-color: rgba(255, 152, 0, 0.5);
+  background: rgba(255, 152, 0, 0.12);
+}
+.pic-copy.copied {
+  color: #7CFC9A;
+  border-color: rgba(124, 252, 154, 0.5);
+  background: rgba(124, 252, 154, 0.12);
+}
+.pic-copy:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.pic-copy-all {
+  margin-top: 0.7rem;
+  width: 100%;
+  height: 1.85rem;
+  border: 1px solid rgba(255, 152, 0, 0.5);
+  border-radius: 6px;
+  background: rgba(255, 152, 0, 0.12);
+  color: #FF9800;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.pic-copy-all:hover {
+  background: #FF9800;
+  color: #141418;
+}
+.pic-copy-all.copied {
+  background: rgba(124, 252, 154, 0.16);
+  border-color: rgba(124, 252, 154, 0.6);
+  color: #7CFC9A;
+}
+/* end project info card */
+
+/* ============================================================
+   Map control pane — satellite theme / geolocate / zoom / compass, fused
+   into one cohesive instrument stack (top-right). Chrome adapts to the
+   basemap brightness (set via .sat-dark / .sat-light on <html>): dark
+   frosted glass + light icons over dark imagery; light frosted card +
+   slate icons over bright imagery. Buoy.Fish orange is the shared accent. */
+
+.maplibregl-ctrl-top-right,
+.mapboxgl-ctrl-top-right {
+  top: 1.25rem;
+  right: 1.25rem;
+}
+
+/* Fuse the separate GL control groups into one continuous pane: drop the
+   default inter-group margins; round only the outermost corners. */
+.maplibregl-ctrl-top-right .maplibregl-ctrl-group,
+.mapboxgl-ctrl-top-right .mapboxgl-ctrl-group {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: hidden;
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  backdrop-filter: blur(14px) saturate(160%);
+  transition: background-color 0.25s ease;
+}
+.maplibregl-ctrl-top-right .maplibregl-ctrl-group:first-child,
+.mapboxgl-ctrl-top-right .mapboxgl-ctrl-group:first-child {
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+}
+.maplibregl-ctrl-top-right .maplibregl-ctrl-group:last-child,
+.mapboxgl-ctrl-top-right .mapboxgl-ctrl-group:last-child {
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 12px;
+}
+.maplibregl-ctrl-top-right .maplibregl-ctrl-group + .maplibregl-ctrl-group,
+.mapboxgl-ctrl-top-right .mapboxgl-ctrl-group + .mapboxgl-ctrl-group {
+  border-top: 1px solid var(--ctrl-divider);
+}
+
+/* Buttons: a touch larger than GL default for presence + touch comfort. */
+.maplibregl-ctrl-top-right .maplibregl-ctrl-group button,
+.mapboxgl-ctrl-top-right .mapboxgl-ctrl-group button,
+.theme-ctrl-btn {
+  width: 2.15rem;
+  height: 2.15rem;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, transform 0.12s ease;
+}
+.maplibregl-ctrl-top-right .maplibregl-ctrl-group button + button,
+.mapboxgl-ctrl-top-right .mapboxgl-ctrl-group button + button {
+  border-top: 1px solid var(--ctrl-divider);
+}
+.theme-ctrl-btn svg { display: block; }
+.maplibregl-ctrl-top-right button:active,
+.mapboxgl-ctrl-top-right button:active { transform: scale(0.9); }
+
+/* Shared hover: orange wash + accent, in both modes. */
+.maplibregl-ctrl-top-right .maplibregl-ctrl-group button:hover,
+.mapboxgl-ctrl-top-right .mapboxgl-ctrl-group button:hover,
+.theme-ctrl-btn:hover {
+  background: rgba(255, 152, 0, 0.18);
+  color: #FF9800;
+}
+
+/* ---- DARK satellite: dark frosted glass, light icons ---- */
+.sat-dark .maplibregl-ctrl-top-right .maplibregl-ctrl-group,
+.sat-dark .mapboxgl-ctrl-top-right .mapboxgl-ctrl-group {
+  --ctrl-divider: rgba(255, 255, 255, 0.10);
+  background: rgba(20, 21, 27, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.10);
+}
+.sat-dark .maplibregl-ctrl-top-right button,
+.sat-dark .mapboxgl-ctrl-top-right button { color: #fff; }
+.sat-dark .theme-ctrl-btn { color: #FF9800; }
+/* GL glyphs are dark baked-in SVG backgrounds → invert to light. */
+.sat-dark .maplibregl-ctrl-top-right .maplibregl-ctrl-icon,
+.sat-dark .mapboxgl-ctrl-top-right .mapboxgl-ctrl-icon {
+  filter: invert(1) brightness(1.7);
+  opacity: 0.82;
+}
+.sat-dark .maplibregl-ctrl-top-right,
+.sat-dark .mapboxgl-ctrl-top-right {
+  filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.45));
+}
+
+/* ---- LIGHT satellite: light frosted card, slate icons ---- */
+.sat-light .maplibregl-ctrl-top-right .maplibregl-ctrl-group,
+.sat-light .mapboxgl-ctrl-top-right .mapboxgl-ctrl-group {
+  --ctrl-divider: rgba(15, 23, 42, 0.10);
+  background: rgba(244, 246, 249, 0.82);
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08);
+}
+.sat-light .maplibregl-ctrl-top-right button,
+.sat-light .mapboxgl-ctrl-top-right button { color: #3f4753; }
+.sat-light .theme-ctrl-btn { color: #3f4753; }
+.sat-light .maplibregl-ctrl-top-right .maplibregl-ctrl-icon,
+.sat-light .mapboxgl-ctrl-top-right .mapboxgl-ctrl-icon { opacity: 0.72; }
+.sat-light .maplibregl-ctrl-top-right .maplibregl-ctrl-group button:hover,
+.sat-light .mapboxgl-ctrl-top-right .mapboxgl-ctrl-group button:hover,
+.sat-light .theme-ctrl-btn:hover {
+  background: rgba(255, 152, 0, 0.24);
+  color: #b35e00;
+}
+.sat-light .maplibregl-ctrl-top-right,
+.sat-light .mapboxgl-ctrl-top-right {
+  filter: drop-shadow(0 10px 22px rgba(0, 0, 0, 0.22));
+}
+/* end map control pane */
+
 /** start main stats stuff **/
 .main-stats {
   padding-top: 1rem;
@@ -473,61 +786,6 @@ body {
 }
 /*end gateway toggle*/
 
-/*start theme toggle*/
-/* Floating light/dark satellite toggle, top-center of the free map area —
-   mirrors app.buoy.fish's MapOverlayControls theme button, translated into
-   this app's design language (frosted dark + Buoy.Fish orange; see
-   .timeline-fab). Desktop centers it in the map space RIGHT of the info
-   pane (left 2vw + 36rem wide), so it never collides with the nav:
-   left = panelRight + (100vw - panelRight) / 2 = 51vw + 18rem. */
-.theme-toggle {
-  position: fixed;
-  top: 0.75rem;
-  left: calc(51vw + 18rem);
-  transform: translateX(-50%);
-  z-index: 6;
-
-  display: grid;
-  place-items: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  padding: 0;
-  border-radius: 10px;
-  border: 1px solid transparent;
-  cursor: pointer;
-
-  transition: background .2s ease, color .2s ease, border-color .2s ease,
-              box-shadow .2s ease, transform .12s ease;
-}
-.theme-toggle svg { display: block; }
-.theme-toggle:active {
-  transform: translateX(-50%) scale(0.94);
-}
-/* Dark satellite active: frosted-transparent square, glowing orange sun. */
-.theme-toggle-dark {
-  background: rgba(18, 18, 22, 0.42);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
-  border-color: rgba(255, 255, 255, 0.14);
-  color: #FF9800;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.40);
-}
-.theme-toggle-dark:hover {
-  border-color: rgba(255, 152, 0, 0.60);
-  box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.14), 0 6px 22px rgba(0, 0, 0, 0.50);
-}
-/* Light satellite active: floating light card with a slate moon. */
-.theme-toggle-light {
-  background: #f1f3f5;
-  border-color: rgba(15, 23, 42, 0.08);
-  color: #3f4753;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22);
-}
-.theme-toggle-light:hover {
-  background: #e6e9ed;
-  color: #1f2630;
-}
-/*end theme toggle*/
 
 /*start gateway tooltip*/
 /* Frosted dark card matching .info-pane / .timeline-control. The GL library
@@ -1015,10 +1273,6 @@ body {
     background: rgba(22, 23, 29, 0.72);
     -webkit-backdrop-filter: saturate(180%) blur(10px);
     backdrop-filter: saturate(180%) blur(10px);
-  }
-  .theme-toggle {
-    left: 50%;
-    top: 0.625rem;
   }
   .brand {
     gap: 0.1875rem;

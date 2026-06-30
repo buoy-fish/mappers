@@ -17,7 +17,8 @@ config :mappers, Mappers.Repo,
 # watchers to your application. We use esbuild for fast
 # JS/CSS bundling with zero vulnerabilities.
 config :mappers, MappersWeb.Endpoint,
-  http: [port: String.to_integer(System.get_env("PORT") || "4002")],
+  # compress: true mirrors prod so gzip can be verified locally.
+  http: [port: String.to_integer(System.get_env("PORT") || "4002"), compress: true],
   debug_errors: true,
   code_reloader: true,
   check_origin: false,
