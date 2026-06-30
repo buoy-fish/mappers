@@ -4,6 +4,7 @@ import formatDistanceToNowStrict from 'date-fns/formatDistanceToNowStrict'
 import parseISO from 'date-fns/parseISO'
 import h3 from 'h3-js/dist/h3-js';
 import { getInitialProjects, fetchProjects } from '../utils/projects'
+import ProjectRow from './ProjectRow'
 
 function InfoPane(props) {
     const [showLegendPane, setShowLegendPane] = React.useState(false)
@@ -233,6 +234,8 @@ function InfoPane(props) {
                             <span>Show Gateways</span>
                         </label>
                     </div>
+                    {/* Dark/light satellite control lives in the top-right map
+                        control pane (ThemeControl), with the zoom/geolocate buttons. */}
                     {props.showGateways &&
                         <div className="legend-line gateway-toggle-line">
                             <label className="gateway-toggle">
@@ -252,21 +255,19 @@ function InfoPane(props) {
             }
             { showProjectsPane &&
                 <div className="projects-pane">
-                    {projects.map(project => (
-                        <div key={project.code || project.name} className="project-row">
-                            <button
-                                className="project-item"
-                                onClick={() => { props.onFlyToProject(project); setShowProjectsPane(false); }}
-                            >
-                                {project.name}
-                            </button>
-                            <button
-                                className="project-timeline-btn"
-                                title="Run coverage timeline for this region"
-                                onClick={() => { props.onRunProjectTimeline(project); setShowProjectsPane(false); }}
-                            >▶ Timeline</button>
-                        </div>
-                    ))}
+                    {projects.map(project => {
+                        const cfg = (props.timelineConfig && project.code && props.timelineConfig[project.code]) || null
+                        return (
+                            <ProjectRow
+                                key={project.code || project.name}
+                                project={project}
+                                start={cfg && cfg.start}
+                                onFlyToProject={props.onFlyToProject}
+                                onRunProjectTimeline={props.onRunProjectTimeline}
+                                onAfterAction={() => setShowProjectsPane(false)}
+                            />
+                        )
+                    })}
                 </div>
             }
             { props.showHexPane &&

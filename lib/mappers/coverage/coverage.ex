@@ -24,6 +24,40 @@ defmodule Mappers.Coverage do
     end
   end
 
+  # Count of distinct device pings (uplinks) whose abstracted res9 hex falls
+  # within `radius_m` metres of `coords_s` ("lat,lng"). Uplink rows carry no
+  # project association, so a project's ping tally is necessarily geographic:
+  # we join uplinks -> h3_links -> h3_res9 and let PostGIS measure the hex
+  # geometry against the project centre. ST_DWithin on ::geography is metric
+  # and uses the GIST index on h3_res9.geom.
+  def count_pings_near(coords_s, radius_m \\ 100_000) do
+    case validateCoords(coords_s) do
+      {:ok, {lat, lng}} ->
+        count =
+          from(u in Uplinks.Uplink,
+            join: l in Link,
+            on: l.uplink_id == u.id,
+            join: h in Res9,
+            on: h.id == l.h3_res9_id,
+            where:
+              fragment(
+                "ST_DWithin(?::geography, ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography, ?)",
+                h.geom,
+                ^lng,
+                ^lat,
+                ^radius_m
+              ),
+            select: count(u.id, :distinct)
+          )
+          |> Repo.one()
+
+        %{count: count || 0, radius_m: radius_m}
+
+      {:error, reason} ->
+        %{error: reason}
+    end
+  end
+
   def get_coverage_from_geo(coords_s) do
     check = validateCoords(coords_s)
 

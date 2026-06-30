@@ -11,10 +11,12 @@ import { useState, useRef, useCallback } from 'react';
 // react-map-gl 7.1 layout: default export is Mapbox-bound, `/maplibre` is MapLibre-bound.
 import { Map as MapboxMap, Popup as MapboxPopup } from 'react-map-gl';
 import { Map as MaplibreMap, Source, Layer, GeolocateControl, NavigationControl, Popup as MaplibrePopup } from 'react-map-gl/maplibre';
-import 'maplibre-gl/dist/maplibre-gl.css';
-import 'mapbox-gl/dist/mapbox-gl.css';
+// GL control/logo/attribution CSS is imported in assets/css/app.css (the served
+// stylesheet) — NOT here. esbuild puts JS-side CSS imports in the /js/app.css
+// sidecar, which the layout never links, so importing them here is dead weight.
 import InfoPane from "../components/InfoPane"
 import GatewayTooltip from "../components/GatewayTooltip"
+import ThemeControl from "../components/ThemeControl"
 import WelcomeModal from "../components/WelcomeModal"
 import TimelineControl, { startOfLocalDay, endOfLocalDay } from "../components/TimelineControl"
 import { uplinkTileServerLayer, uplinkHotspotsLineLayer, uplinkRelayLineLayer, uplinkHotspotsCircleLayer, uplinkHotspotsHexLayer, uplinkChannelLayer, gatewayMarkerLayer, gatewayLabelLayer, selectedHexLayer, timelineRevealLayer, timelineBaselineLayer } from './Layers.js';
@@ -540,11 +542,23 @@ function Map(props) {
     // intro placard.
     const isTimelineDeepLink = React.useMemo(() => !!parseTimelineLink(location.search), []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Load hex data from Phoenix API (replaces Martin tile server)
+    // Load hex data from the Phoenix API (replaces Martin tile server). The
+    // endpoint returns a compact array of [id_string, id_int, best_rssi, snr];
+    // we rebuild each hex polygon from its H3 index via geojson2h3 — the same
+    // call the h3:new channel uses below — so the two sources stay identical.
+    // properties.id stays the H3 STRING (onClick navigates /uplinks/hex/:id and
+    // calls getHex with it); feature.id is the INTEGER for feature-state select.
     React.useEffect(() => {
         fetch('/api/v1/hexes')
             .then(res => res.json())
-            .then(data => setHexGeoJson(data))
+            .then(rows => {
+                const features = rows.map(([idStr, idInt, best_rssi, snr]) => {
+                    const f = geojson2h3.h3ToFeature(idStr, { id: idStr, id_string: idStr, best_rssi, snr });
+                    f.id = idInt;
+                    return f;
+                });
+                setHexGeoJson({ type: "FeatureCollection", features });
+            })
             .catch(err => console.error('Failed to load hex data:', err));
     }, []);
 
@@ -1077,6 +1091,16 @@ function Map(props) {
         applySatelliteTreatment(map, darkSatellite ? SATELLITE_DARK_TREATMENT : SATELLITE_LIGHT_TREATMENT);
     }, [darkSatellite]);
 
+    // Reflect the active basemap brightness on <html> so the map control pane
+    // can adapt its chrome (dark frosted glass over dark imagery, light card
+    // over bright). The CARTO fallback is always dark.
+    React.useEffect(() => {
+        const dark = USE_MAPBOX ? darkSatellite : true;
+        const el = document.documentElement;
+        el.classList.toggle('sat-dark', dark);
+        el.classList.toggle('sat-light', !dark);
+    }, [darkSatellite]);
+
     const interactiveLayerIds = ['public.h3_res9', 'uplinkChannelLayer', 'timelineRevealLayer', 'timelineBaselineLayer', 'gatewayMarkerLayer'];
 
     return (
@@ -1106,6 +1130,11 @@ function Map(props) {
                 ref={setMapRef}
                 interactiveLayerIds={interactiveLayerIds}
             >
+                {/* Satellite theme toggle, top of the control stack — only on
+                    the Mapbox basemap (CARTO has no raster to treat). */}
+                {USE_MAPBOX &&
+                    <ThemeControl dark={darkSatellite} onToggle={() => setDarkSatellite(!darkSatellite)} />
+                }
                 <GeolocateControl
                     positionOptions={{ enableHighAccuracy: true }}
                     fitBoundsOptions={{ maxZoom: viewState.zoom }}
@@ -1177,33 +1206,7 @@ function Map(props) {
                 }
 
             </MapGL>
-            <InfoPane hexId={hexId} bestRssi={bestRssi} snr={snr} uplinks={uplinks} gatewayRecords={gatewayRecords} showHexPane={showHexPane} onCloseHexPaneClick={onCloseHexPaneClick} showHexPaneCloseButton={showHexPaneCloseButton} showGateways={showGateways} onToggleGateways={() => setShowGateways(!showGateways)} hideCoverage={hideCoverage} onToggleCoverage={() => setHideCoverage(!hideCoverage)} onFlyToProject={onFlyToProject} onRunProjectTimeline={onRunProjectTimeline} />
-            {/* Floating light/dark satellite toggle, top-center of the free map
-                area — mirrors app.buoy.fish's MapOverlayControls theme button.
-                Shows the mode you'd switch TO (sun while dark, moon while
-                light). Only rendered on the Mapbox basemap; the CARTO fallback
-                has no raster layers to treat. */}
-            {USE_MAPBOX &&
-                <button
-                    className={"theme-toggle " + (darkSatellite ? "theme-toggle-dark" : "theme-toggle-light")}
-                    onClick={() => setDarkSatellite(!darkSatellite)}
-                    aria-label={darkSatellite ? "Switch to light satellite" : "Switch to dark satellite"}
-                    title={darkSatellite ? "Switch to light satellite" : "Switch to dark satellite"}
-                >
-                    {darkSatellite
-                        ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
-                              <circle cx="12" cy="12" r="4" />
-                              <path d="M12 2v2" /><path d="M12 20v2" />
-                              <path d="m4.93 4.93 1.41 1.41" /><path d="m17.66 17.66 1.41 1.41" />
-                              <path d="M2 12h2" /><path d="M20 12h2" />
-                              <path d="m6.34 17.66-1.41 1.41" /><path d="m19.07 4.93-1.41 1.41" />
-                          </svg>
-                        : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
-                          </svg>
-                    }
-                </button>
-            }
+            <InfoPane hexId={hexId} bestRssi={bestRssi} snr={snr} uplinks={uplinks} gatewayRecords={gatewayRecords} showHexPane={showHexPane} onCloseHexPaneClick={onCloseHexPaneClick} showHexPaneCloseButton={showHexPaneCloseButton} showGateways={showGateways} onToggleGateways={() => setShowGateways(!showGateways)} hideCoverage={hideCoverage} onToggleCoverage={() => setHideCoverage(!hideCoverage)} onFlyToProject={onFlyToProject} onRunProjectTimeline={onRunProjectTimeline} timelineConfig={TIMELINE_PROJECT_CONFIG} />
             {timelineMode && timeDomain.minT !== null && timeDomain.maxT !== null &&
                 <TimelineControl
                     minT={timeDomain.minT}

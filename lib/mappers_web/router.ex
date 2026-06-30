@@ -67,6 +67,7 @@ defmodule MappersWeb.Router do
     pipe_through :allow_cors
 
     get "/coverage/geo/:coords", API.V1.CoverageController, :get_coverage_from_geo
+    get "/coverage/count/:coords", API.V1.CoverageController, :count_pings_near
     get "/coverage/timeline", API.V1.TimelineController, :index
   end
 
