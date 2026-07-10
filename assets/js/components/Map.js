@@ -149,8 +149,22 @@ function hideBasemapClutter(map) {
     });
 }
 
+// Layers whose features represent a clickable hex, in the order onClick
+// dispatches on them. Gateway markers are interactive too, but they're handled
+// separately (they swallow the click) so they're not listed here.
+const HEX_LAYERS = ['public.h3_res9', 'uplinkChannelLayer', 'timelineRevealLayer', 'timelineBaselineLayer'];
+
 var selectedStateIdTile = null;
 var selectedStateIdChannel = null;
+
+// setFeatureState() errors with "The feature id parameter must be provided."
+// when `id` is undefined, and is meaningless when it's null (the normal state
+// for whichever hex source has never had a selection). Guard each call on its
+// own id rather than on an OR across both.
+function setHexSelected(map, source, id, selected) {
+    if (id === null || id === undefined) return;
+    map.setFeatureState({ source, id }, { selected });
+}
 const channel = socket.channel("h3:new")
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -552,9 +566,16 @@ function Map(props) {
         fetch('/api/v1/hexes')
             .then(res => res.json())
             .then(rows => {
-                const features = rows.map(([idStr, idInt, best_rssi, snr]) => {
+                const features = rows.map(([idStr, _idInt, best_rssi, snr]) => {
                     const f = geojson2h3.h3ToFeature(idStr, { id: idStr, id_string: idStr, best_rssi, snr });
-                    f.id = idInt;
+                    // The feature id is carried by `promoteId: "id"` on the Source,
+                    // not by this top-level field. mapbox-gl's GeoJSON->vector-tile
+                    // encoder only writes an id when Number.isSafeInteger(+id), and
+                    // h3_index_int exceeds 2^53, so a numeric id is silently dropped
+                    // and every clicked feature arrives with id === undefined.
+                    // Setting it to the H3 string keeps the deep-link synthetic
+                    // feature below consistent with the promoted id.
+                    f.id = idStr;
                     return f;
                 });
                 setHexGeoJson({ type: "FeatureCollection", features });
@@ -696,16 +717,8 @@ function Map(props) {
         const map = mapRef.current?.getMap();
         if (!map) return;
         // unselect any currently selected hex on both hex layers
-        if (selectedStateIdTile !== null || selectedStateIdChannel !== null) {
-            map.setFeatureState(
-                { source: 'uplink-tileserver', id: selectedStateIdTile },
-                { selected: true }
-            );
-            map.setFeatureState(
-                { source: 'uplink-channel', id: selectedStateIdChannel },
-                { selected: true }
-            );
-        }
+        setHexSelected(map, 'uplink-tileserver', selectedStateIdTile, true);
+        setHexSelected(map, 'uplink-channel', selectedStateIdChannel, true);
     }
 
     const getHex = h3_index => {
@@ -847,97 +860,83 @@ function Map(props) {
         }
         setGatewayPopup(null);
         setShowHexPaneCloseButton(false);
-        if (features) {
-            features.forEach(feature => {
-                if (!feature?.layer) return;
-                if (feature.layer.id == "public.h3_res9") {
-                    // Mark this hex as clicked synchronously BEFORE navigate(),
-                    // so the location useEffect knows onClick already handled it.
-                    clickedHexRef.current = feature.properties.id;
-                    navigate("/uplinks/hex/" + feature.properties.id);
-                    // set hex data for info pane
-                    setBestRssi(feature.properties.best_rssi);
-                    setSnr(feature.properties.snr.toFixed(2));
-                    setHexId(feature.properties.id);
-                    getHex(feature.properties.id);
-                    setShowHexPane(true);
+        // A click selects exactly ONE hex: the topmost feature under the
+        // cursor. queryRenderedFeatures can hand us the same hex more than
+        // once (a cell straddling a tile boundary is carried in both tiles'
+        // buffers, and the library can only dedupe when features have ids),
+        // and distinct hexes can overlap where the live channel source covers
+        // a cell the coverage source already has. Iterating the whole array
+        // ran the select-navigate-fetch path once per feature, so the last one
+        // silently won the URL. Take the first match and dispatch on it.
+        const feature = (features || []).find(
+            f => f?.layer && HEX_LAYERS.includes(f.layer.id)
+        );
+        if (!feature) return;
 
-                    // unselect any currently selected hex on both hex layers
-                    if (selectedStateIdTile !== null || selectedStateIdTile !== null) {
-                        map.setFeatureState(
-                            { source: 'uplink-tileserver', id: selectedStateIdTile },
-                            { selected: true }
-                        );
-                        map.setFeatureState(
-                            { source: 'uplink-channel', id: selectedStateIdChannel },
-                            { selected: true }
-                        );
-                    }
-                    selectedStateIdTile = feature.id;
-                    map.setFeatureState(
-                        { source: 'uplink-tileserver', id: selectedStateIdTile },
-                        { selected: false }
-                    );
-                    setTimeout(() => { setShowHexPaneCloseButton(true); }, 1000)
-                }
-                else if (feature.layer.id == "uplinkChannelLayer") {
-                    // Mark this hex as clicked synchronously BEFORE navigate(),
-                    // so the location useEffect knows onClick already handled it.
-                    clickedHexRef.current = feature.properties.id_string;
-                    navigate("/uplinks/hex/" + feature.properties.id_string);
-                    // set hex data for info pane
-                    setBestRssi(feature.properties.best_rssi);
-                    setSnr(feature.properties.snr.toFixed(2));
-                    setHexId(feature.properties.id_string);
-                    getHex(feature.properties.id_string);
-                    setShowHexPane(true);
+        if (feature.layer.id == "public.h3_res9") {
+            // Mark this hex as clicked synchronously BEFORE navigate(),
+            // so the location useEffect knows onClick already handled it.
+            clickedHexRef.current = feature.properties.id;
+            navigate("/uplinks/hex/" + feature.properties.id);
+            // set hex data for info pane
+            setBestRssi(feature.properties.best_rssi);
+            setSnr(feature.properties.snr.toFixed(2));
+            setHexId(feature.properties.id);
+            getHex(feature.properties.id);
+            setShowHexPane(true);
 
-                    // unselect any currently selected hex on both hex layers
-                    if (selectedStateIdChannel !== null || selectedStateIdTile !== null) {
-                        map.setFeatureState(
-                            { source: 'uplink-channel', id: selectedStateIdChannel },
-                            { selected: true }
-                        );
-                        map.setFeatureState(
-                            { source: 'uplink-tileserver', id: selectedStateIdTile },
-                            { selected: true }
-                        );
-                    }
-                    selectedStateIdChannel = feature.id;
-                    map.setFeatureState(
-                        { source: 'uplink-channel', id: selectedStateIdChannel },
-                        { selected: false }
-                    );
+            // unselect any currently selected hex on both hex layers
+            setHexSelected(map, 'uplink-tileserver', selectedStateIdTile, true);
+            setHexSelected(map, 'uplink-channel', selectedStateIdChannel, true);
+            selectedStateIdTile = feature.id;
+            setHexSelected(map, 'uplink-tileserver', selectedStateIdTile, false);
+            setTimeout(() => { setShowHexPaneCloseButton(true); }, 1000)
+        }
+        else if (feature.layer.id == "uplinkChannelLayer") {
+            // Mark this hex as clicked synchronously BEFORE navigate(),
+            // so the location useEffect knows onClick already handled it.
+            clickedHexRef.current = feature.properties.id_string;
+            navigate("/uplinks/hex/" + feature.properties.id_string);
+            // set hex data for info pane
+            setBestRssi(feature.properties.best_rssi);
+            setSnr(feature.properties.snr.toFixed(2));
+            setHexId(feature.properties.id_string);
+            getHex(feature.properties.id_string);
+            setShowHexPane(true);
 
-                    // Don't fly/zoom on click. The previous `map.fitBounds([bbox of
-                    // single H3 res9 cell])` zoomed to ~level 18 (a single 150 m
-                    // hex filling the screen), which felt broken. Hexes from the
-                    // initial /api/v1/hexes load (handled by the public.h3_res9
-                    // branch above) never zoomed; matching that behavior makes
-                    // click feedback consistent regardless of when the hex first
-                    // appeared on the map.
+            // unselect any currently selected hex on both hex layers
+            setHexSelected(map, 'uplink-channel', selectedStateIdChannel, true);
+            setHexSelected(map, 'uplink-tileserver', selectedStateIdTile, true);
+            selectedStateIdChannel = feature.id;
+            setHexSelected(map, 'uplink-channel', selectedStateIdChannel, false);
 
-                    setTimeout(() => { setShowHexPaneCloseButton(true); }, 1000)
-                }
-                else if (feature.layer.id == "timelineRevealLayer" || feature.layer.id == "timelineBaselineLayer") {
-                    // Timeline hexes open the same InfoPane as live hexes. The
-                    // detail (hotspot list, distances) comes from
-                    // /api/v1/uplinks/hex/:id, which works for any hex. Timeline
-                    // features carry NO `snr` property (the endpoint omits it),
-                    // so we pass null rather than calling .toFixed on undefined —
-                    // InfoPane tolerates a null/empty snr. Feature-state
-                    // selection highlighting is skipped for timeline hexes in
-                    // this slice.
-                    clickedHexRef.current = feature.properties.id;
-                    setHexId(feature.properties.id);
-                    setBestRssi(feature.properties.best_rssi);
-                    setSnr(null);
-                    getHex(feature.properties.id);
-                    setShowHexPane(true);
-                    navigate("/uplinks/hex/" + feature.properties.id);
-                    setTimeout(() => { setShowHexPaneCloseButton(true); }, 1000)
-                }
-            });
+            // Don't fly/zoom on click. The previous `map.fitBounds([bbox of
+            // single H3 res9 cell])` zoomed to ~level 18 (a single 150 m
+            // hex filling the screen), which felt broken. Hexes from the
+            // initial /api/v1/hexes load (handled by the public.h3_res9
+            // branch above) never zoomed; matching that behavior makes
+            // click feedback consistent regardless of when the hex first
+            // appeared on the map.
+
+            setTimeout(() => { setShowHexPaneCloseButton(true); }, 1000)
+        }
+        else if (feature.layer.id == "timelineRevealLayer" || feature.layer.id == "timelineBaselineLayer") {
+            // Timeline hexes open the same InfoPane as live hexes. The
+            // detail (hotspot list, distances) comes from
+            // /api/v1/uplinks/hex/:id, which works for any hex. Timeline
+            // features carry NO `snr` property (the endpoint omits it),
+            // so we pass null rather than calling .toFixed on undefined —
+            // InfoPane tolerates a null/empty snr. Feature-state
+            // selection highlighting is skipped for timeline hexes in
+            // this slice.
+            clickedHexRef.current = feature.properties.id;
+            setHexId(feature.properties.id);
+            setBestRssi(feature.properties.best_rssi);
+            setSnr(null);
+            getHex(feature.properties.id);
+            setShowHexPane(true);
+            navigate("/uplinks/hex/" + feature.properties.id);
+            setTimeout(() => { setShowHexPaneCloseButton(true); }, 1000)
         }
     }, []);
 
@@ -1101,7 +1100,7 @@ function Map(props) {
         el.classList.toggle('sat-light', !dark);
     }, [darkSatellite]);
 
-    const interactiveLayerIds = ['public.h3_res9', 'uplinkChannelLayer', 'timelineRevealLayer', 'timelineBaselineLayer', 'gatewayMarkerLayer'];
+    const interactiveLayerIds = [...HEX_LAYERS, 'gatewayMarkerLayer'];
 
     return (
         <div className='map-container'>
@@ -1160,7 +1159,7 @@ function Map(props) {
                     <Layer {...timelineRevealLayer} filter={timelineRevealFilter} />
                 </Source>
                 {!timelineMode && !hideCoverage &&
-                    <Source id="uplink-tileserver" type="geojson" data={hexGeoJson}>
+                    <Source id="uplink-tileserver" type="geojson" data={hexGeoJson} promoteId="id">
                         <Layer {...uplinkTileServerLayer} />
                     </Source>
                 }
