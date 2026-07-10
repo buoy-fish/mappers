@@ -151,6 +151,15 @@ function hideBasemapClutter(map) {
 
 var selectedStateIdTile = null;
 var selectedStateIdChannel = null;
+
+// setFeatureState() errors with "The feature id parameter must be provided."
+// when `id` is undefined, and is meaningless when it's null (the normal state
+// for whichever hex source has never had a selection). Guard each call on its
+// own id rather than on an OR across both.
+function setHexSelected(map, source, id, selected) {
+    if (id === null || id === undefined) return;
+    map.setFeatureState({ source, id }, { selected });
+}
 const channel = socket.channel("h3:new")
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -552,9 +561,16 @@ function Map(props) {
         fetch('/api/v1/hexes')
             .then(res => res.json())
             .then(rows => {
-                const features = rows.map(([idStr, idInt, best_rssi, snr]) => {
+                const features = rows.map(([idStr, _idInt, best_rssi, snr]) => {
                     const f = geojson2h3.h3ToFeature(idStr, { id: idStr, id_string: idStr, best_rssi, snr });
-                    f.id = idInt;
+                    // The feature id is carried by `promoteId: "id"` on the Source,
+                    // not by this top-level field. mapbox-gl's GeoJSON->vector-tile
+                    // encoder only writes an id when Number.isSafeInteger(+id), and
+                    // h3_index_int exceeds 2^53, so a numeric id is silently dropped
+                    // and every clicked feature arrives with id === undefined.
+                    // Setting it to the H3 string keeps the deep-link synthetic
+                    // feature below consistent with the promoted id.
+                    f.id = idStr;
                     return f;
                 });
                 setHexGeoJson({ type: "FeatureCollection", features });
@@ -696,16 +712,8 @@ function Map(props) {
         const map = mapRef.current?.getMap();
         if (!map) return;
         // unselect any currently selected hex on both hex layers
-        if (selectedStateIdTile !== null || selectedStateIdChannel !== null) {
-            map.setFeatureState(
-                { source: 'uplink-tileserver', id: selectedStateIdTile },
-                { selected: true }
-            );
-            map.setFeatureState(
-                { source: 'uplink-channel', id: selectedStateIdChannel },
-                { selected: true }
-            );
-        }
+        setHexSelected(map, 'uplink-tileserver', selectedStateIdTile, true);
+        setHexSelected(map, 'uplink-channel', selectedStateIdChannel, true);
     }
 
     const getHex = h3_index => {
@@ -863,21 +871,10 @@ function Map(props) {
                     setShowHexPane(true);
 
                     // unselect any currently selected hex on both hex layers
-                    if (selectedStateIdTile !== null || selectedStateIdTile !== null) {
-                        map.setFeatureState(
-                            { source: 'uplink-tileserver', id: selectedStateIdTile },
-                            { selected: true }
-                        );
-                        map.setFeatureState(
-                            { source: 'uplink-channel', id: selectedStateIdChannel },
-                            { selected: true }
-                        );
-                    }
+                    setHexSelected(map, 'uplink-tileserver', selectedStateIdTile, true);
+                    setHexSelected(map, 'uplink-channel', selectedStateIdChannel, true);
                     selectedStateIdTile = feature.id;
-                    map.setFeatureState(
-                        { source: 'uplink-tileserver', id: selectedStateIdTile },
-                        { selected: false }
-                    );
+                    setHexSelected(map, 'uplink-tileserver', selectedStateIdTile, false);
                     setTimeout(() => { setShowHexPaneCloseButton(true); }, 1000)
                 }
                 else if (feature.layer.id == "uplinkChannelLayer") {
@@ -893,21 +890,10 @@ function Map(props) {
                     setShowHexPane(true);
 
                     // unselect any currently selected hex on both hex layers
-                    if (selectedStateIdChannel !== null || selectedStateIdTile !== null) {
-                        map.setFeatureState(
-                            { source: 'uplink-channel', id: selectedStateIdChannel },
-                            { selected: true }
-                        );
-                        map.setFeatureState(
-                            { source: 'uplink-tileserver', id: selectedStateIdTile },
-                            { selected: true }
-                        );
-                    }
+                    setHexSelected(map, 'uplink-channel', selectedStateIdChannel, true);
+                    setHexSelected(map, 'uplink-tileserver', selectedStateIdTile, true);
                     selectedStateIdChannel = feature.id;
-                    map.setFeatureState(
-                        { source: 'uplink-channel', id: selectedStateIdChannel },
-                        { selected: false }
-                    );
+                    setHexSelected(map, 'uplink-channel', selectedStateIdChannel, false);
 
                     // Don't fly/zoom on click. The previous `map.fitBounds([bbox of
                     // single H3 res9 cell])` zoomed to ~level 18 (a single 150 m
@@ -1160,7 +1146,7 @@ function Map(props) {
                     <Layer {...timelineRevealLayer} filter={timelineRevealFilter} />
                 </Source>
                 {!timelineMode && !hideCoverage &&
-                    <Source id="uplink-tileserver" type="geojson" data={hexGeoJson}>
+                    <Source id="uplink-tileserver" type="geojson" data={hexGeoJson} promoteId="id">
                         <Layer {...uplinkTileServerLayer} />
                     </Source>
                 }
