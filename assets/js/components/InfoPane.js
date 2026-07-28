@@ -237,19 +237,41 @@ function InfoPane(props) {
                     {/* Dark/light satellite control lives in the top-right map
                         control pane (ThemeControl), with the zoom/geolocate buttons. */}
                     {props.showGateways &&
-                        <div className="legend-line gateway-toggle-line">
-                            <label className="gateway-toggle">
-                                <button
-                                    role="switch"
-                                    aria-checked={props.hideCoverage}
-                                    onClick={props.onToggleCoverage}
-                                    className={`gateway-switch ${props.hideCoverage ? 'active' : ''}`}
-                                >
-                                    <span className="gateway-switch-knob" />
-                                </button>
-                                <span>Hide Coverage</span>
-                            </label>
-                        </div>
+                        <React.Fragment>
+                            <div className="legend-line gateway-toggle-line">
+                                <label className="gateway-toggle">
+                                    <button
+                                        role="switch"
+                                        aria-checked={props.hideCoverage}
+                                        onClick={props.onToggleCoverage}
+                                        className={`gateway-switch ${props.hideCoverage ? 'active' : ''}`}
+                                    >
+                                        <span className="gateway-switch-knob" />
+                                    </button>
+                                    <span>Hide Coverage</span>
+                                </label>
+                            </div>
+                            {/* Inspection mode: only offered once coverage is
+                                hidden — it paints the non-permanent (mobile/
+                                bench) gateway hexes purple against the bare
+                                basemap. Map.js force-closes it when either
+                                parent toggle turns off. */}
+                            {props.hideCoverage &&
+                                <div className="legend-line gateway-toggle-line">
+                                    <label className="gateway-toggle">
+                                        <button
+                                            role="switch"
+                                            aria-checked={props.showOtherHexes}
+                                            onClick={props.onToggleOtherHexes}
+                                            className={`gateway-switch ${props.showOtherHexes ? 'active' : ''}`}
+                                        >
+                                            <span className="gateway-switch-knob" />
+                                        </button>
+                                        <span>Show mobile gateway hexes</span>
+                                    </label>
+                                </div>
+                            }
+                        </React.Fragment>
                     }
                 </div>
             }

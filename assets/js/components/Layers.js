@@ -99,6 +99,20 @@ export const selectedHexLayer = {
     }
 };
 
+// Inspection-mode layer: hexes whose coverage comes only from NON-permanent
+// (mobile / bench) gateways, shown while normal coverage is hidden. Flat
+// purple (already in the palette as the unselected-hex color) with
+// deliberately NO RSSI ramp — these hexes answer "where", not "how strong".
+export const otherHexLayer = {
+    id: 'otherHexLayer',
+    type: 'fill',
+    paint: {
+        'fill-color': '#b67ffe',
+        'fill-opacity': 0.55,
+        'fill-outline-color': '#ffffff'
+    }
+};
+
 export const gatewayMarkerLayer = {
     id: 'gatewayMarkerLayer',
     type: 'circle',
