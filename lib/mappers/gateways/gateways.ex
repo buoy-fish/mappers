@@ -47,7 +47,10 @@ defmodule Mappers.Gateways do
       mesh_relay_id: g["mesh_relay_id"],
       # Inventory registration time (app.buoy.fish PR #162) — shown as
       # "Installed" in the gateway tooltip.
-      installed_at: g["installed_at"]
+      installed_at: g["installed_at"],
+      # Deployment classification (permanent | mobile | bench_test); nil on
+      # older API versions and treated as "permanent" everywhere (fail-open).
+      location_phase: g["location_phase"]
     }
   end
 
@@ -123,20 +126,27 @@ defmodule Mappers.Gateways do
     end)
   end
 
-  defp identifiers(gw) do
+  # identifiers/1, name_candidates/1, relay_suffix/1 and normalize_name/1 are
+  # public: Mappers.Coverage.Scope classifies coverage against the exact same
+  # identity dimensions and must never grow a second, subtly different matcher.
+
+  @doc "Lowercased stream identifiers: hardware EUI, Helium pubkey, slot GWIDs."
+  def identifiers(gw) do
     [gw.gateway_eui, Map.get(gw, :helium_pubkey) | gw.concentrator_ids || []]
     |> Enum.reject(&(&1 in [nil, ""]))
     |> Enum.map(&String.downcase/1)
   end
 
-  defp name_candidates(gw) do
+  @doc "Normalized names the gateway may be heard under (operator + Helium animal)."
+  def name_candidates(gw) do
     [gw.hotspot_name, Map.get(gw, :helium_animal_name)]
     |> Enum.map(&normalize_name/1)
     |> Enum.reject(&is_nil/1)
     |> Enum.uniq()
   end
 
-  defp relay_suffix(gw) do
+  @doc "Lowercased 8-hex mesh relay suffix, or nil for non-relay gateways."
+  def relay_suffix(gw) do
     case Map.get(gw, :mesh_relay_id) do
       id when is_binary(id) and id != "" -> String.downcase(id)
       _ -> nil
@@ -168,9 +178,10 @@ defmodule Mappers.Gateways do
     end
   end
 
-  defp normalize_name(nil), do: nil
+  @doc "Case/separator-insensitive name form (lowercase, `-`/`_` as spaces)."
+  def normalize_name(nil), do: nil
 
-  defp normalize_name(name) do
+  def normalize_name(name) do
     name
     |> String.downcase()
     |> String.replace(~r/[-_\s]+/, " ")

@@ -10,6 +10,12 @@ import Config
 config :mappers,
   ecto_repos: [Mappers.Repo]
 
+# Gateway-inventory cache (app.buoy.fish poll) and coverage-scope memoization.
+config :mappers,
+  inventory_http_client: Mappers.Gateways.Inventory.HTTPClient,
+  inventory_refresh_ms: 60_000,
+  scope_cache_ms: 60_000
+
 config :mappers, Mappers.Repo,
   types: Mappers.PostgresTypes
 

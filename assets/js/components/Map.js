@@ -19,7 +19,7 @@ import GatewayTooltip from "../components/GatewayTooltip"
 import ThemeControl from "../components/ThemeControl"
 import WelcomeModal from "../components/WelcomeModal"
 import TimelineControl, { startOfLocalDay, endOfLocalDay } from "../components/TimelineControl"
-import { uplinkTileServerLayer, uplinkHotspotsLineLayer, uplinkRelayLineLayer, uplinkHotspotsCircleLayer, uplinkHotspotsHexLayer, uplinkChannelLayer, gatewayMarkerLayer, gatewayLabelLayer, selectedHexLayer, timelineRevealLayer, timelineBaselineLayer } from './Layers.js';
+import { uplinkTileServerLayer, uplinkHotspotsLineLayer, uplinkRelayLineLayer, uplinkHotspotsCircleLayer, uplinkHotspotsHexLayer, uplinkChannelLayer, gatewayMarkerLayer, gatewayLabelLayer, selectedHexLayer, timelineRevealLayer, timelineBaselineLayer, otherHexLayer } from './Layers.js';
 import { get } from '../data/Rest'
 import { getInitialProjects, fetchProjects } from '../utils/projects'
 import { parseTimelineLink, buildTimelineLink } from '../utils/timelineLink'
@@ -108,9 +108,11 @@ function applySatelliteTreatment(map, treatment) {
 
 // Both basemaps draw cartographic clutter the Buoy.Fish map doesn't want — it
 // only cares about the land/water divide so the coverage hexes are the focus.
-// Hide three families of layers on whichever style is active by matching the
+// Hide five families of layers on whichever style is active by matching the
 // source-layer they live in, with an id-regex fallback in case a style renames
-// a layer. Coastline / water / place (city) labels are left untouched.
+// a layer. Coastline / water geometry, water/marine LABELS ("Gulf of Nicoya"),
+// and country labels are deliberately kept — everything below the country
+// level (cities/towns/states), POIs, and natural-feature callouts goes.
 //   1. Roads/highways:
 //      - CARTO dark-matter (OpenMapTiles): `transportation` (geometry) +
 //        `transportation_name` (highway shields).
@@ -121,11 +123,31 @@ function applySatelliteTreatment(map, treatment) {
 //   3. National parks (the green fill + tree-icon label):
 //      - Mapbox: `national_park` source-layer (fill) + the park label layers
 //        (id contains "national-park"/"national_park").  CARTO: `park`.
+//   4. Sub-country place labels (white city/town/state text):
+//      - Mapbox: `place_label` source-layer, `settlement*` ids (major/minor/
+//        subdivision) + `state-label`. `country-label` is KEPT.
+//      - CARTO: `place` source-layer, everything but country/continent ids.
+//   5. POIs + natural-feature callouts (peaks, reserves, the green icons):
+//      - Mapbox: whole `poi_label` source-layer + `natural-point-label` /
+//        `natural-line-label` ids. Water labels live in the same
+//        `natural_label` source-layer — the keep-guard below protects them.
+//      - CARTO: whole `poi` source-layer.
 function hideBasemapClutter(map) {
     const layers = map.getStyle()?.layers || [];
     layers.forEach((layer) => {
         const srcLayer = layer["source-layer"] || "";
         const id = layer.id || "";
+        // Keep-guard FIRST: never hide water/marine labels, whatever rule
+        // below might otherwise match them. Mapbox puts sea/bay/ocean names in
+        // `natural_label` (water-ish ids) plus `waterway-label`; OpenMapTiles
+        // (CARTO) uses the `water_name` and `waterway` source-layers.
+        const isWaterLabel =
+            srcLayer === "water_name" ||
+            srcLayer === "waterway" ||
+            id === "waterway-label" ||
+            (srcLayer === "natural_label" &&
+                /water|sea|ocean|bay|reservoir|river|lake/i.test(id));
+        if (isWaterLabel) return;
         const isClutter =
             // roads
             srcLayer === "transportation" ||
@@ -139,7 +161,15 @@ function hideBasemapClutter(map) {
             // national parks (fill + label)
             srcLayer === "national_park" ||
             srcLayer === "park" ||
-            /national.?park/i.test(id);
+            /national.?park/i.test(id) ||
+            // sub-country place labels (country-label stays visible)
+            (srcLayer === "place_label" &&
+                (/^settlement/.test(id) || id === "state-label")) ||
+            (srcLayer === "place" && !/country|continent/i.test(id)) ||
+            // POIs + non-water natural-feature callouts
+            srcLayer === "poi_label" ||
+            srcLayer === "poi" ||
+            /natural-(point|line)-label/.test(id);
         if (!isClutter) return;
         try {
             map.setLayoutProperty(layer.id, "visibility", "none");
@@ -255,6 +285,20 @@ function Map(props) {
     const [gatewayRecords, setGatewayRecords] = useState({});
     const [showGateways, setShowGateways] = useState(false);
     const [hideCoverage, setHideCoverage] = useState(false);
+    // Inspection mode: paint the NON-permanent ("other") gateway hexes purple
+    // while normal coverage is hidden. Only reachable when Show Gateways and
+    // Hide Coverage are both on (the toggle is nested under them in the
+    // legend); the reset effect below force-closes it when either turns off.
+    const [showOtherHexes, setShowOtherHexes] = useState(false);
+    const [otherHexGeoJson, setOtherHexGeoJson] = useState(emptyFC);
+    // Mirrors showOtherHexes for the once-created h3:new channel handler
+    // (same pattern as timelineModeRef). Declared AFTER the state it mirrors
+    // to dodge the minifier TDZ gotcha.
+    const showOtherHexesRef = useRef(false);
+    React.useEffect(() => { showOtherHexesRef.current = showOtherHexes; }, [showOtherHexes]);
+    React.useEffect(() => {
+        if (!hideCoverage || !showGateways) setShowOtherHexes(false);
+    }, [hideCoverage, showGateways]);
     // ------------------------------------------------------------------
     // Gateway marker tooltip. Desktop: lingering hover (300ms) or click;
     // touch: long-press (500ms). A hover-opened popup is transient (clears
@@ -588,7 +632,16 @@ function Map(props) {
         fetch('/api/v1/gateways')
             .then(res => res.json())
             .then(data => {
-                const features = (data.gateways || []).map(gw => ({
+                // Markers show only PERMANENT installations. A missing
+                // location_phase (older app.buoy.fish API) means permanent —
+                // fail-open keeps the map at status quo across the deploy gap.
+                // gatewayRecords below stays UNFILTERED: hex-detail tables must
+                // resolve names for every gateway that ever heard an uplink,
+                // bench/mobile included.
+                const permanentGateways = (data.gateways || []).filter(
+                    gw => (gw.location_phase ?? "permanent") === "permanent"
+                );
+                const features = permanentGateways.map(gw => ({
                     type: "Feature",
                     geometry: {
                         type: "Point",
@@ -602,7 +655,8 @@ function Map(props) {
                         role: gw.role ?? null,
                         description: gw.description ?? null,
                         altitude: gw.altitude ?? null,
-                        concentrator_ids: gw.concentrator_ids || []
+                        concentrator_ids: gw.concentrator_ids || [],
+                        location_phase: gw.location_phase ?? "permanent"
                     }
                 }));
                 setGatewayGeoJson({ type: "FeatureCollection", features });
@@ -654,6 +708,29 @@ function Map(props) {
             .catch(err => console.error('Failed to load timeline data:', err));
     }, [timelineMode]);
 
+    // Non-permanent ("other") hex fetch. Lazy: triggered the first time
+    // inspection mode turns on, then cached (same refetch guard as the
+    // timeline fetch above). The endpoint returns the same compact positional
+    // array as /api/v1/hexes, mapped through the same geojson2h3 call so the
+    // sources stay identical. A non-array body (error JSON from an older
+    // server, an HTML error page) is treated as empty rather than crashing.
+    React.useEffect(() => {
+        if (!showOtherHexes) return;
+        if (otherHexGeoJson.features && otherHexGeoJson.features.length > 0) return;
+        fetch('/api/v1/hexes?scope=other')
+            .then(res => res.json())
+            .then(rows => {
+                if (!Array.isArray(rows)) return;
+                const features = rows.map(([idStr, _idInt, best_rssi, snr]) => {
+                    const f = geojson2h3.h3ToFeature(idStr, { id: idStr, id_string: idStr, best_rssi, snr });
+                    f.id = idStr;
+                    return f;
+                });
+                setOtherHexGeoJson({ type: "FeatureCollection", features });
+            })
+            .catch(err => console.error('Failed to load other-hex data:', err));
+    }, [showOtherHexes]);
+
     React.useEffect(() => {
         if (!initComplete && location.pathname != lastPath) {
             setLastPath(location.pathname);
@@ -663,6 +740,24 @@ function Map(props) {
                 // view doesn't twitch as live uplinks land. timelineModeRef is a
                 // ref (not state) because this handler closure is created once.
                 if (timelineModeRef.current) return;
+                // `permanent` is new on the payload; older servers omit it and
+                // missing means permanent, matching the marker filter's
+                // fail-open. Non-permanent hexes never join the orange live
+                // layer — when inspection mode is on they are appended to the
+                // purple other-hex collection instead, otherwise dropped (the
+                // lazy scope=other fetch covers anything that lands before the
+                // first toggle-on; later live drops reappear on page reload).
+                if (payload.body.permanent === false) {
+                    if (showOtherHexesRef.current) {
+                        const other = geojson2h3.h3ToFeature(payload.body.id_string, { 'id': payload.body.id_string, 'id_string': payload.body.id_string, 'best_rssi': payload.body.best_rssi, 'snr': payload.body.snr })
+                        other.id = payload.body.id_string
+                        setOtherHexGeoJson(prev => ({
+                            "type": "FeatureCollection",
+                            "features": [...(prev.features || []), other]
+                        }))
+                    }
+                    return;
+                }
                 var new_feature = geojson2h3.h3ToFeature(payload.body.id_string, { 'id': payload.body.id, 'id_string': payload.body.id_string, 'best_rssi': payload.body.best_rssi, 'snr': payload.body.snr })
                 new_feature.id = payload.body.id
                 features.push(new_feature)
@@ -1183,6 +1278,18 @@ function Map(props) {
                 <Source id="uplink-hotspots-circle" type="geojson" data={uplinkHotspotsData.circle}>
                     <Layer {...uplinkHotspotsCircleLayer} />
                 </Source>
+                {/* Inspection-mode purple layer: non-permanent ("other")
+                    gateway hexes. Like the timeline source above, Source +
+                    Layer are ALWAYS mounted (react-map-gl's Layer does a
+                    setState on unmount, which fires a "state update on
+                    unmounted component" warning) and gated by DATA instead:
+                    empty FeatureCollection whenever inspection mode is off.
+                    Declared BEFORE the gateways source so markers paint on
+                    top. Deliberately NOT in interactiveLayerIds — these hexes
+                    answer "where", not "how strong". */}
+                <Source id="uplink-other" type="geojson" data={showOtherHexes ? otherHexGeoJson : emptyFC}>
+                    <Layer {...otherHexLayer} />
+                </Source>
                 {showGateways &&
                     <Source id="gateways" type="geojson" data={gatewayGeoJson}>
                         <Layer {...gatewayMarkerLayer} />
@@ -1205,7 +1312,7 @@ function Map(props) {
                 }
 
             </MapGL>
-            <InfoPane hexId={hexId} bestRssi={bestRssi} snr={snr} uplinks={uplinks} gatewayRecords={gatewayRecords} showHexPane={showHexPane} onCloseHexPaneClick={onCloseHexPaneClick} showHexPaneCloseButton={showHexPaneCloseButton} showGateways={showGateways} onToggleGateways={() => setShowGateways(!showGateways)} hideCoverage={hideCoverage} onToggleCoverage={() => setHideCoverage(!hideCoverage)} onFlyToProject={onFlyToProject} onRunProjectTimeline={onRunProjectTimeline} timelineConfig={TIMELINE_PROJECT_CONFIG} />
+            <InfoPane hexId={hexId} bestRssi={bestRssi} snr={snr} uplinks={uplinks} gatewayRecords={gatewayRecords} showHexPane={showHexPane} onCloseHexPaneClick={onCloseHexPaneClick} showHexPaneCloseButton={showHexPaneCloseButton} showGateways={showGateways} onToggleGateways={() => setShowGateways(!showGateways)} hideCoverage={hideCoverage} onToggleCoverage={() => setHideCoverage(!hideCoverage)} showOtherHexes={showOtherHexes} onToggleOtherHexes={() => setShowOtherHexes(!showOtherHexes)} onFlyToProject={onFlyToProject} onRunProjectTimeline={onRunProjectTimeline} timelineConfig={TIMELINE_PROJECT_CONFIG} />
             {timelineMode && timeDomain.minT !== null && timeDomain.maxT !== null &&
                 <TimelineControl
                     minT={timeDomain.minT}

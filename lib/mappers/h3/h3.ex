@@ -331,9 +331,23 @@ defmodule Mappers.H3 do
               end
           end
 
-        # broadcast new hex on channel
+        # broadcast new hex on channel; permanent lets clients keep the hex off
+        # the default (permanent-only) layer. :unknown fails open to true so an
+        # inventory outage never hides live coverage.
+        permanent =
+          case Mappers.Coverage.Scope.classify_hotspots(message["hotspots"] || []) do
+            :unknown -> true
+            flag -> flag
+          end
+
         MappersWeb.Endpoint.broadcast!("h3:new", "new_h3", %{
-          body: %{id: h3_res9_id, id_string: h3_res9_id_s, best_rssi: rssi, snr: snr}
+          body: %{
+            id: h3_res9_id,
+            id_string: h3_res9_id_s,
+            best_rssi: rssi,
+            snr: snr,
+            permanent: permanent
+          }
         })
 
         result

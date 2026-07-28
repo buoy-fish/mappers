@@ -20,3 +20,10 @@ config :mappers, MappersWeb.Endpoint,
 
 # Print only warnings and errors during test
 config :logger, level: :warning
+
+# Never let the inventory poller hit the network from tests; individual tests
+# drive Mappers.Test.StubInventoryClient via :inventory_stub_response. The huge
+# refresh interval keeps the boot-time supervised poller from firing mid-test.
+config :mappers,
+  inventory_http_client: Mappers.Test.StubInventoryClient,
+  inventory_refresh_ms: 3_600_000

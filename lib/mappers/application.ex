@@ -13,6 +13,10 @@ defmodule Mappers.Application do
       MappersWeb.Telemetry,
       # Start the PubSub system
       {Phoenix.PubSub, name: Mappers.PubSub},
+      # Cached app.buoy.fish gateway inventory (60s refresh)
+      {Mappers.Gateways.Inventory, []},
+      # Permanent-gateway coverage classification (reads the inventory cache)
+      {Mappers.Coverage.Scope, []},
       # Start the Endpoint (http/https)
       MappersWeb.Endpoint
       # Start a worker by calling: Mappers.Worker.start_link(arg)

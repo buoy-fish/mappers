@@ -13,6 +13,17 @@ gateway over the air. Always means *confirmed, real* reception — never modeled
 or predicted.
 _Avoid_: Reception, signal map (when you mean the confirmed footprint).
 
+**Permanent coverage (the default view)**:
+Coverage restricted to hexes with at least one contributor that is a
+permanently-installed gateway, plus device-GPS-only hexes (uplinks recorded
+without a usable gateway position — still confirmed, real reception). This is
+what the map and Timeline serve by default (`scope=permanent`). Hexes heard
+only by mobile or bench/test gateways are excluded from the default footprint
+and visible via the "Show mobile gateway hexes" inspection toggle
+(`scope=other`).
+_Avoid_: Calling the default view "all coverage" — it is deliberately the
+installed footprint.
+
 **Hex**:
 A single H3 resolution-9 cell. The atomic unit of coverage.
 _Avoid_: Tile, cell, hexagon.
