@@ -68,10 +68,15 @@ Coverage hex colors are defined in two places:
 | Method | Path | Purpose |
 |--------|------|---------|
 | `POST` | `/api/v1/ingest/uplink` | Ingest device uplink (ChirpStack format) |
+| `GET` | `/api/v1/hexes` | Coverage hexes, compact rows. `?scope=permanent` (default) \| `other` \| `all` |
+| `GET` | `/api/v1/coverage/timeline` | Timeline rows; same `scope` param and default |
+| `GET` | `/api/v1/gateways` | Gateway markers (proxied from the app.buoy.fish inventory cache) |
 | `GET` | `/api/v1/uplinks/hex/:h3_index` | Get hotspots that heard a hex |
 | `GET` | `/api/v1/coverage/geo/:coords` | Coverage query by coordinates |
 
 The ingest endpoint is open for any service to publish mapping data. The mapper maintains its own database and abstracts locations to H3 hex tiles for public visualization.
+
+**Scope semantics**: the default hex/timeline view serves only hexes with at least one contributor that is a permanently-installed gateway (`location_phase == "permanent"` in the app.buoy.fish feed) or a device-GPS-only uplink (`device_only` placeholder). `other` is the complement (mobile/bench/unknown contributors); `all` is unfiltered. Classification lives in `Mappers.Coverage.Scope`; the gateway feed cache in `Mappers.Gateways.Inventory` (both supervised, both fail open to unscoped serving when the app feed is unavailable). The `h3:new` channel payload carries `permanent: boolean`.
 
 ## Infrastructure
 
@@ -152,6 +157,9 @@ Requires PostgreSQL with PostGIS running locally. DB config is in `config/dev.ex
 | `DATABASE_URL` | PostgreSQL connection string | (prod only) |
 | `SECRET_KEY_BASE` | Phoenix secret (`mix phx.gen.secret`) | (prod only) |
 | `HOST` | Hostname | `map.buoy.fish` (prod) |
+| `APP_BUOY_URL` | app.buoy.fish base URL for the gateway inventory feed | `http://localhost:4000` |
+
+App-level config knobs (in `config/config.exs`, not env): `:inventory_refresh_ms` (gateway feed refresh, 60s) and `:scope_cache_ms` (permanent-hex-set memo, 60s).
 
 ## Future: Multi-Hop Relay Visualization
 
