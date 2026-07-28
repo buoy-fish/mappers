@@ -1,6 +1,7 @@
 defmodule MappersWeb.API.V1.HexController do
   use MappersWeb, :controller
 
+  alias Mappers.Coverage.Scope
   alias Mappers.Repo
   alias Mappers.H3.Res9
 
@@ -18,10 +19,18 @@ defmodule MappersWeb.API.V1.HexController do
   `id_string` (the H3 index PK) drives click navigation (`/uplinks/hex/:id`);
   `id_int` (h3_index_int) is the integer feature id used for feature-state
   selection. A short public cache lets browsers reuse the slow-changing set —
-  brand-new hexes still arrive live over the channel.
+  brand-new hexes still arrive live over the channel (URLs differ per scope,
+  so the cache stays correct).
+
+  `scope` narrows the set by contributing gateway: `permanent` (default, also
+  any unknown value), `other` (the complement — hexes with no permanent
+  contributor), `all` (unfiltered). Fail-open: when classification is
+  unavailable every scope serves all rows.
   """
-  def index(conn, _params) do
-    rows = Repo.all(from r in Res9, select: [r.id, r.h3_index_int, r.best_rssi, r.snr])
+  def index(conn, params) do
+    rows =
+      Repo.all(from r in Res9, select: [r.id, r.h3_index_int, r.best_rssi, r.snr])
+      |> Scope.filter_rows(Scope.parse_scope(params["scope"]), fn [id | _] -> id end)
 
     conn
     |> put_resp_header("cache-control", "public, max-age=60")

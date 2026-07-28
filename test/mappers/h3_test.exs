@@ -91,4 +91,90 @@ defmodule Mappers.H3Test do
     fetched = Repo.get(Res9, res9.id)
     assert is_nil(fetched.first_seen)
   end
+
+  describe "h3:new broadcast permanent flag" do
+    alias Mappers.Coverage.Scope
+    alias Mappers.Gateways.Inventory
+
+    setup do
+      Inventory.reset()
+      Scope.reset()
+      MappersWeb.Endpoint.subscribe("h3:new")
+
+      on_exit(fn ->
+        Application.delete_env(:mappers, :inventory_stub_response)
+        Inventory.reset()
+        Scope.reset()
+      end)
+
+      :ok
+    end
+
+    defp stub_inventory! do
+      Application.put_env(
+        :mappers,
+        :inventory_stub_response,
+        {:ok,
+         [
+           %{
+             "gateway_eui" => "AC1F09FFFE000001",
+             "name" => "Harbor Master",
+             "location_phase" => "permanent"
+           },
+           %{
+             "gateway_eui" => "ECECECECECECECEC",
+             "name" => "Bench GW",
+             "location_phase" => "bench_test"
+           }
+         ]}
+      )
+
+      Inventory.refresh()
+    end
+
+    defp message_heard_by(gateway_id) do
+      update_in(message([]), ["hotspots"], fn [hotspot] ->
+        [Map.merge(hotspot, %{"name" => "unknown", "gateway_id" => gateway_id})]
+      end)
+    end
+
+    test "permanent: true when a permanent gateway heard the uplink" do
+      stub_inventory!()
+
+      {:ok, _} = H3.create(message_heard_by("ac1f09fffe000001"))
+
+      assert_receive %Phoenix.Socket.Broadcast{event: "new_h3", payload: %{body: body}}
+      assert body.permanent == true
+    end
+
+    test "permanent: false when only a non-permanent gateway heard it" do
+      stub_inventory!()
+
+      {:ok, _} = H3.create(message_heard_by("ecececececececec"))
+
+      assert_receive %Phoenix.Socket.Broadcast{event: "new_h3", payload: %{body: body}}
+      assert body.permanent == false
+    end
+
+    test "permanent: true for a device-GPS-only uplink (device_only placeholder)" do
+      stub_inventory!()
+
+      message =
+        update_in(message([]), ["hotspots"], fn [hotspot] ->
+          [Map.merge(hotspot, %{"id" => "device_only", "name" => "device_only"})]
+        end)
+
+      {:ok, _} = H3.create(message)
+
+      assert_receive %Phoenix.Socket.Broadcast{event: "new_h3", payload: %{body: body}}
+      assert body.permanent == true
+    end
+
+    test "fail-open: permanent: true when the inventory never loaded" do
+      {:ok, _} = H3.create(message_heard_by("ac1f09fffe000001"))
+
+      assert_receive %Phoenix.Socket.Broadcast{event: "new_h3", payload: %{body: body}}
+      assert body.permanent == true
+    end
+  end
 end
