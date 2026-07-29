@@ -151,6 +151,13 @@ body {
 .nav-link a:hover {
   text-decoration: underline;
 }
+/* An open sheet lights its own trigger, so it reads as a toggle rather than a
+   link that did something invisible. Text-only on desktop, where the frosted
+   info-pane already frames the open sheet; the mobile block turns it into a
+   filled chip, since there the sheet floats free on the map. */
+.nav-link button.active {
+  color: #FF9800;
+}
 .legend-transition-enter-active {
   transition: transform 0.2s ease-out, opacity 0.22s ease-out;
 }
@@ -1241,10 +1248,15 @@ body {
   html, body {
     font-size: 16px;
   }
+  /* Both sheets stop short of the instrument column on the right, the same
+     split the header band uses — otherwise the top rows (and the Projects
+     ▶ Timeline buttons) slide under the zoom/geolocate buttons on a narrow
+     screen. 4.5rem clears the 2.15rem-wide stack and its 1.25rem inset. */
   .legend {
     position: fixed;
     top: 4rem;
     padding: 0 1rem;
+    max-width: calc(100% - 4.5rem);
   }
   /* Projects mirrors the Legend's mobile treatment: a fixed sheet pinned
      beneath the nav (the desktop pane lives inside .info-pane, which becomes
@@ -1256,6 +1268,7 @@ body {
     left: 0;
     right: 0;
     padding: 0 1rem;
+    max-width: calc(100% - 4.5rem);
     max-height: calc(100vh - 5rem);
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
@@ -1269,10 +1282,26 @@ body {
      satellite imagery, so swap to the frosted-dark chip used elsewhere. */
   .legend-line,
   .project-item,
-  .project-timeline-btn {
+  .project-timeline-btn,
+  .nav-link button {
     background: rgba(22, 23, 29, 0.72);
     -webkit-backdrop-filter: saturate(180%) blur(10px);
     backdrop-filter: saturate(180%) blur(10px);
+  }
+  /* The two sheet triggers wear the chip of the sheet they open, sized to sit
+     in the same rhythm as the legend rows below them. */
+  .nav-link button {
+    display: flex;
+    align-items: center;
+    min-height: 2.25rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+  }
+  .nav-link button.active {
+    background: #FF9800;
+    color: #16171d;
+    font-weight: 600;
   }
   .brand {
     gap: 0.1875rem;
@@ -1288,17 +1317,32 @@ body {
     /*allows us to split the div to top/bottom*/
     display: contents;
   }
+  /* Top edge, split by function: the brand and the sheet triggers sit on the
+     LEFT; the map's own instrument stack (theme / geolocate / zoom / compass)
+     owns the right. Right-aligned nav links collided with that stack on narrow
+     screens — `padding-right` keeps this band clear of it for good, including
+     the taller 5-button stack that appears on the Mapbox basemap. */
   .pane-nav {
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
 
+    justify-content: flex-start;
+    gap: 0.5rem;
+
     padding: 0.25rem 0.75rem;
+    padding-right: 3.75rem;
     border: none;
 
     width: auto;
     max-width: unset;
+  }
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0;
   }
   .pane-nav.has-subcontent {
     position: inherit;

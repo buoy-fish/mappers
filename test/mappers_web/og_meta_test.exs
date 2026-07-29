@@ -22,6 +22,59 @@ defmodule MappersWeb.OgMetaTest do
     end
   end
 
+  describe "project deep-link meta" do
+    test "humanizes the project slug from the path into the title" do
+      meta =
+        OgMeta.build(%{},
+          base_url: @base,
+          page_url: @base <> "/gulf-of-nicoya",
+          path_info: ["gulf-of-nicoya"]
+        )
+
+      assert meta.title == "Gulf Of Nicoya coverage · Buoy.Fish"
+      assert meta.description =~ "Gulf Of Nicoya"
+      assert meta.image == @base <> "/images/og-cover.png"
+      assert meta.url == @base <> "/gulf-of-nicoya"
+    end
+
+    test "display-toggle flag segments never become the project" do
+      meta =
+        OgMeta.build(%{},
+          base_url: @base,
+          path_info: ["gulf-of-nicoya", "show-gateways", "hide-coverage"]
+        )
+
+      assert meta.title == "Gulf Of Nicoya coverage · Buoy.Fish"
+    end
+
+    test "a flags-only path gets the default card" do
+      meta = OgMeta.build(%{}, base_url: @base, path_info: ["show-gateways"])
+      assert meta.title == "Buoy.Fish Coverage Map"
+    end
+
+    test "hex deep-links and other reserved paths get the default card" do
+      for path <- [["uplinks", "hex", "8928308280fffff"], ["api", "v1", "hexes"], ["metrics"]] do
+        meta = OgMeta.build(%{}, base_url: @base, path_info: path)
+        assert meta.title == "Buoy.Fish Coverage Map"
+      end
+    end
+
+    test "a slug that isn't kebab-case gets the default card" do
+      meta = OgMeta.build(%{}, base_url: @base, path_info: ["Not A Slug"])
+      assert meta.title == "Buoy.Fish Coverage Map"
+    end
+
+    test "a timeline link wins over the path" do
+      meta =
+        OgMeta.build(%{"play" => "punta-eugenia-baja"},
+          base_url: @base,
+          path_info: ["gulf-of-nicoya"]
+        )
+
+      assert meta.title == "Punta Eugenia Baja coverage timeline · Buoy.Fish"
+    end
+  end
+
   describe "timeline deep-link meta" do
     test "humanizes the project slug into the title" do
       meta = OgMeta.build(%{"play" => "punta-eugenia-baja"}, @opts)

@@ -2,9 +2,11 @@
   "repository": {},
   "description": "Buoy.Fish Coverage Mapper frontend assets",
   "license": "MIT",
+  "type": "module",
   "scripts": {
     "deploy": "node build.mjs --deploy",
-    "watch": "node build.mjs --watch"
+    "watch": "node build.mjs --watch",
+    "test": "node --test \"test/**/*.test.mjs\""
   },
   "dependencies": {
     "@turf/bbox": "^6.3.0",

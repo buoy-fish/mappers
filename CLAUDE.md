@@ -76,6 +76,23 @@ Coverage hex colors are defined in two places:
 
 The ingest endpoint is open for any service to publish mapping data. The mapper maintains its own database and abstracts locations to H3 hex tiles for public visualization.
 
+## Shareable URLs (SPA deep-links)
+
+Everything the map shows is addressable, so any view can be copied out of the address bar.
+
+| URL | Meaning |
+|-----|---------|
+| `/` | Default view (admin-configured center/zoom) |
+| `/<project-code>` | Framed on that project, e.g. `/gulf-of-nicoya-costa-rica` |
+| `/<project-code>/show-gateways` | …plus display toggles. Flag segments are order-independent, and a nested flag implies its parents (`show-mobile-hexes` ⇒ `hide-coverage` ⇒ `show-gateways`) |
+| `/show-gateways` | Flags with no project |
+| `/uplinks/hex/:h3_index` | A single hex, info pane open |
+| `/?play=<project-code>&start=…&end=…&speed=…&loop=…&lat=…&lng=…&zoom=…` | Timeline bloom; built by the scrubber's Copy-link button |
+
+The codecs are pure and unit-tested: `assets/js/utils/projectLink.js` (path form, flag vocabulary, reserved prefixes) and `assets/js/utils/timelineLink.js` (query form). `Map.js` treats the URL as the source of truth in both directions — it applies an incoming path and mirrors state back out (project changes push history, toggles replace), which is what makes Back/Forward work between views. `MappersWeb.OgMeta` mirrors the flag/reserved vocabulary server-side to title link previews; keep the two lists in sync. The project routes are a catch-all declared LAST in the router, so every explicit route wins and `PageController` 404s reserved prefixes that fall through.
+
+Run the JS unit tests with `npm test --prefix assets` (node:test, no runner dependency).
+
 **Scope semantics**: the default hex/timeline view serves only hexes with at least one contributor that is a permanently-installed gateway (`location_phase == "permanent"` in the app.buoy.fish feed) or a device-GPS-only uplink (`device_only` placeholder). `other` is the complement (mobile/bench/unknown contributors); `all` is unfiltered. Classification lives in `Mappers.Coverage.Scope`; the gateway feed cache in `Mappers.Gateways.Inventory` (both supervised, both fail open to unscoped serving when the app feed is unavailable). The `h3:new` channel payload carries `permanent: boolean`.
 
 ## Infrastructure

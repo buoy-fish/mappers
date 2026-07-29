@@ -14,13 +14,13 @@ class App extends React.Component {
 ReactDOM.render(
   <BrowserRouter>
     <Routes>
-      <Route path="/" element={<App />} >
-        <Route path="uplinks" element={<App />}>
-          <Route path="hex" element={<App />}>
-            <Route path=":hexId" element={<App />} />
-          </Route>
-        </Route>
-      </Route>
+      {/* Hex deep-links keep a named route so useParams() yields :hexId. */}
+      <Route path="/uplinks/hex/:hexId" element={<App />} />
+      {/* Everything else mounts the same screen: "/" and project deep-links
+          like /gulf-of-nicoya/show-gateways, whose path Map.js decodes with
+          utils/projectLink.js. A catch-all is what lets an arbitrary
+          project-slug segment work without enumerating projects here. */}
+      <Route path="*" element={<App />} />
     </Routes>
   </BrowserRouter>,
   document.getElementById("react-app")
