@@ -19,17 +19,6 @@ defmodule MappersWeb.OgMeta do
   @card_path "/images/og-cover.png"
   @mapbox_static "https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/static"
 
-  # Display-toggle segments of a project deep-link. MIRRORS `VIEW_FLAG_SLUGS` in
-  # assets/js/utils/projectLink.js — keep the two in sync. They're skipped when
-  # looking for the project slug so `/gulf-of-nicoya/show-gateways` still titles
-  # as the project.
-  @flag_slugs ~w(show-gateways hide-coverage show-mobile-hexes)
-
-  # First segments that belong to another route (SPA hex links, API scopes, the
-  # tile proxy, static prefixes) rather than to a project.
-  @reserved_segments ~w(uplinks api tiles metrics dashboard socket live css js
-                        images fonts favicon.ico robots.txt)
-
   @doc """
   `params` is the string-keyed query-param map. Options:
 
@@ -55,7 +44,7 @@ defmodule MappersWeb.OgMeta do
           url: page_url
         }
 
-      project = project_slug(Keyword.get(opts, :path_info)) ->
+      project = MappersWeb.DeepLink.project_slug(Keyword.get(opts, :path_info)) ->
         name = humanize(project)
 
         %{
@@ -74,29 +63,6 @@ defmodule MappersWeb.OgMeta do
         }
     end
   end
-
-  # The project slug of a view deep-link, or nil. Same rules as
-  # `parseProjectLink` in assets/js/utils/projectLink.js: a reserved first
-  # segment disqualifies the path, flag segments are skipped, and the first
-  # remaining segment must be lowercase kebab-case to count.
-  defp project_slug([first | _] = segments) when is_binary(first) do
-    if first in @reserved_segments do
-      nil
-    else
-      segments
-      |> Enum.reject(&(&1 in @flag_slugs))
-      |> List.first()
-      |> valid_slug()
-    end
-  end
-
-  defp project_slug(_), do: nil
-
-  defp valid_slug(s) when is_binary(s) do
-    if Regex.match?(~r/^[a-z0-9][a-z0-9-]*$/, s), do: s, else: nil
-  end
-
-  defp valid_slug(_), do: nil
 
   # "punta-eugenia-baja" -> "Punta Eugenia Baja". Sanitized so a hostile slug
   # can't inject anything (the layout also HTML-escapes on render).

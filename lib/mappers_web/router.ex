@@ -38,6 +38,14 @@ defmodule MappersWeb.Router do
     plug Corsica, origins: "*"
   end
 
+  # Composed IN FRONT of :browser for the deep-link catch-all only (see the
+  # bottom of this file). Kept as its own pipeline rather than folded into
+  # :browser, which serves /uplinks/* — a reserved prefix that must still mount
+  # the SPA via its own earlier route.
+  pipeline :reject_reserved do
+    plug MappersWeb.Plug.ReservedPaths
+  end
+
   scope "/", MappersWeb do
     pipe_through :browser
 
@@ -102,11 +110,12 @@ defmodule MappersWeb.Router do
   #
   # Declared LAST on purpose: Phoenix matches routes in definition order, so
   # every explicit route above — the API scopes, /metrics, the dev dashboard —
-  # still wins. Paths under a reserved prefix that fall through to here (a
-  # typo'd /api/... for instance) are 404'd by PageController rather than
-  # answered with an HTML shell.
+  # still wins. What falls through is anything they didn't match, including a
+  # typo'd /api/... or /metrics/<anything>; `ReservedPaths` 404s those before
+  # `:browser` negotiates a format, so a JSON caller gets a 404 rather than the
+  # 406 that `accepts ["html"]` would raise first.
   scope "/", MappersWeb do
-    pipe_through :browser
+    pipe_through [:reject_reserved, :browser]
 
     get "/:project", PageController, :index
     get "/:project/*flags", PageController, :index
