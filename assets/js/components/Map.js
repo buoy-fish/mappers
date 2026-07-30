@@ -23,6 +23,7 @@ import { uplinkTileServerLayer, uplinkHotspotsLineLayer, uplinkRelayLineLayer, u
 import { get } from '../data/Rest'
 import { getInitialProjects, fetchProjects } from '../utils/projects'
 import { parseTimelineLink, buildTimelineLink } from '../utils/timelineLink'
+import { parseProjectLink, buildProjectPath } from '../utils/projectLink'
 import { geoToH3, h3ToGeo, h3ToGeoBoundary } from "h3-js";
 import socket from "../socket";
 import geojson2h3 from 'geojson2h3';
@@ -299,6 +300,24 @@ function Map(props) {
     React.useEffect(() => {
         if (!hideCoverage || !showGateways) setShowOtherHexes(false);
     }, [hideCoverage, showGateways]);
+    // ------------------------------------------------------------------
+    // Shareable view URL. `activeProjectCode` is the project the current view
+    // is framed on (set by the Projects pane, a ▶ Timeline launch, or a
+    // deep-link); together with the three display toggles it serializes to a
+    // path like /gulf-of-nicoya/show-gateways/hide-coverage. `viewPath` is that
+    // path — mirrored into the address bar by the effect further down, and
+    // where the hex pane returns to when it closes. Declared up here, beside
+    // the state it derives from, so handlers defined below can read it.
+    // ------------------------------------------------------------------
+    const [activeProjectCode, setActiveProjectCode] = useState(null);
+    const viewPath = React.useMemo(
+        () => buildProjectPath({ project: activeProjectCode, showGateways, hideCoverage, showOtherHexes }),
+        [activeProjectCode, showGateways, hideCoverage, showOtherHexes]
+    );
+    // The URL is only mirrored once any incoming deep-link has been applied —
+    // otherwise the first mirror pass (before the project resolves) would
+    // rewrite a shared link's path away to "/".
+    const [mirrorArmed, setMirrorArmed] = useState(false);
     // ------------------------------------------------------------------
     // Gateway marker tooltip. Desktop: lingering hover (300ms) or click;
     // touch: long-press (500ms). A hover-opened popup is transient (clears
@@ -600,6 +619,19 @@ function Map(props) {
     // intro placard.
     const isTimelineDeepLink = React.useMemo(() => !!parseTimelineLink(location.search), []); // eslint-disable-line react-hooks/exhaustive-deps
 
+    // The view the URL asked for, captured ONCE at mount: a project slug and/or
+    // display flags (see utils/projectLink.js). Null when the path belongs to
+    // another route, e.g. a /uplinks/hex/:id deep-link.
+    const initialViewIntent = React.useMemo(() => parseProjectLink(location.pathname), []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // True when that intent actually asks for something (bare "/" doesn't).
+    // Like isHexDeepLink, it suppresses the first-time WelcomeModal: someone
+    // opening a shared project link wants the coverage, not the intro placard.
+    const isProjectDeepLink = !!initialViewIntent && (
+        !!initialViewIntent.project || initialViewIntent.showGateways ||
+        initialViewIntent.hideCoverage || initialViewIntent.showOtherHexes
+    );
+
     // Load hex data from the Phoenix API (replaces Martin tile server). The
     // endpoint returns a compact array of [id_string, id_int, best_rssi, snr];
     // we rebuild each hex polygon from its H3 index via geojson2h3 — the same
@@ -804,7 +836,10 @@ function Map(props) {
             "features": []
         }
         setUplinkHotspotsData({ line: hotspotLineFeatureCollection, circle: hotspotCircleFeatureCollection, hex: hotspotHexFeatureCollection })
-        navigate("/");
+        // Return to the view the user was on (project + display toggles) rather
+        // than bare "/" — closing a hex shouldn't discard the framing they
+        // arrived with, or the link they'd copy next.
+        navigate(viewPath);
         setShowHexPaneCloseButton(false);
     }
 
@@ -1066,7 +1101,84 @@ function Map(props) {
             longitude: project.lng,
             zoom: project.zoom || 12
         }));
+        // Naming the project is what makes the view addressable: the mirror
+        // effect turns it into /<project-code> in the address bar.
+        setActiveProjectCode(project.code || null);
     }, []);
+
+    // The URL drives the view: whenever the path is something OTHER than what
+    // the current view already serializes to, apply it. That covers the initial
+    // deep-link (/<project-slug>[/<display-flag>...]) AND browser Back/Forward
+    // between views — without it, Back would rewind the address bar while the
+    // map stayed put.
+    //
+    // No feedback loop: the mirror effect below only ever navigates TO
+    // `viewPath`, and this effect no-ops as soon as the path matches it.
+    //
+    // Flags are assigned (not just switched on) so dropping a flag segment
+    // turns it back off, parents-first — parseProjectLink has already filled in
+    // implied parents, so the nesting-reset effect leaves them alone. The
+    // project slug needs the projects list, resolved cache-first exactly like
+    // the timeline deep-link below. Arming the mirror is the last step on every
+    // path (including failures) so the address bar can't be rewritten
+    // mid-resolve.
+    React.useEffect(() => {
+        const intent = parseProjectLink(location.pathname);
+        // Not a view path (a hex deep-link, say), or already showing it.
+        if (!intent || location.pathname === viewPath) { setMirrorArmed(true); return; }
+        setShowGateways(intent.showGateways);
+        setHideCoverage(intent.hideCoverage);
+        setShowOtherHexes(intent.showOtherHexes);
+        if (!intent.project) {
+            setActiveProjectCode(null);
+            setMirrorArmed(true);
+            return;
+        }
+        if (intent.project === activeProjectCode) { setMirrorArmed(true); return; }
+        const frame = (project) => {
+            if (!project) {
+                console.warn('project deep-link: unknown project', intent.project);
+            } else if (isTimelineDeepLink) {
+                // A ?play= link carries the sender's exact camera — name the
+                // project but don't re-frame over it.
+                setActiveProjectCode(project.code);
+            } else {
+                onFlyToProject(project);
+            }
+            setMirrorArmed(true);
+        };
+        const resolve = (list) => (list || []).find(p => p.code === intent.project) || null;
+        // getInitialProjects() is synchronous (cache/fallback, never null), so
+        // the common case frames on this tick.
+        const synced = resolve(getInitialProjects());
+        if (synced) { frame(synced); return; }
+        // Cold cache for a project that isn't in the baked-in fallback list:
+        // try the live list once.
+        let cancelled = false;
+        fetchProjects().then(list => {
+            if (cancelled) return;
+            if (!list) console.warn('project deep-link: project list unavailable for', intent.project);
+            frame(resolve(list));
+        });
+        return () => { cancelled = true; };
+    }, [location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps -- the path is the input; viewPath/state are read, not tracked
+
+    // Mirror the view into the address bar so the URL is always a shareable
+    // link. Two cases own the URL instead and are left untouched: an open hex
+    // pane (/uplinks/hex/:id — restored by onCloseHexPaneClick) and a timeline
+    // deep-link, whose ?play=... query string must survive. Choosing a
+    // different project is a real navigation (pushes, so Back returns to the
+    // previous one); flipping a display toggle rewrites the current entry.
+    const lastMirroredProjectRef = useRef(activeProjectCode);
+    React.useEffect(() => {
+        if (!mirrorArmed) return;
+        if (isTimelineDeepLink) return;
+        if (routerParams.hexId != null && routerParams.hexId !== 'undefined') return;
+        const projectChanged = lastMirroredProjectRef.current !== activeProjectCode;
+        lastMirroredProjectRef.current = activeProjectCode;
+        if (viewPath === location.pathname) return;
+        navigate(viewPath, { replace: !projectChanged });
+    }, [mirrorArmed, viewPath, routerParams.hexId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Core Timeline launcher: fly to the project's framed view, enter Timeline
     // mode, and queue the deterministic bloom over [start, end]. All knobs are
@@ -1079,6 +1191,10 @@ function Map(props) {
         // Start BLANK so the bloom begins on an empty map (no full→blank flash).
         setRangeStart(0); setRangeEnd(0); setCursor(0); setPlaying(false);
         setActiveTimelineProjectCode(projectCode);
+        // A timeline launch also frames a project, so the path reflects it
+        // (/gulf-of-nicoya). The richer ?play=... link — window, speed, camera —
+        // stays the timeline's own Copy-link button.
+        setActiveProjectCode(projectCode || null);
         setSpeed(speed || 1);
         setShowBaseline(!!baseline);
         setLoop(!!loop);
@@ -1340,7 +1456,7 @@ function Map(props) {
                     shareUrl={shareUrl}
                 />
             }
-            <WelcomeModal showWelcomeModal={showWelcomeModal && !isHexDeepLink && !isTimelineDeepLink} onCloseWelcomeModalClick={onCloseWelcomeModalClick} />
+            <WelcomeModal showWelcomeModal={showWelcomeModal && !isHexDeepLink && !isTimelineDeepLink && !isProjectDeepLink} onCloseWelcomeModalClick={onCloseWelcomeModalClick} />
         </div>
     );
 }

@@ -94,4 +94,21 @@ defmodule MappersWeb.Router do
       live_dashboard "/dashboard", metrics: MappersWeb.Telemetry
     end
   end
+
+  # Project / view deep-links: `/<project-slug>[/<display-flag>...]`, e.g.
+  # `/gulf-of-nicoya/show-gateways/hide-coverage`. The URL contract lives in
+  # assets/js/utils/projectLink.js; the server just mounts the SPA shell (with
+  # project-aware link-preview metadata) and lets React apply the view.
+  #
+  # Declared LAST on purpose: Phoenix matches routes in definition order, so
+  # every explicit route above — the API scopes, /metrics, the dev dashboard —
+  # still wins. Paths under a reserved prefix that fall through to here (a
+  # typo'd /api/... for instance) are 404'd by PageController rather than
+  # answered with an HTML shell.
+  scope "/", MappersWeb do
+    pipe_through :browser
+
+    get "/:project", PageController, :index
+    get "/:project/*flags", PageController, :index
+  end
 end

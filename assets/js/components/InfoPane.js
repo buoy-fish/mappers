@@ -165,10 +165,18 @@ function InfoPane(props) {
                 </div>
                 <ul className="nav-links">
                     <li className="nav-link">
-                        <button onClick={onLegendClick}>Legend</button>
+                        <button
+                            className={classNames({ active: showLegendPane })}
+                            aria-expanded={showLegendPane}
+                            onClick={onLegendClick}
+                        >Legend</button>
                     </li>
                     <li className="nav-link">
-                        <button onClick={onProjectsClick}>Projects</button>
+                        <button
+                            className={classNames({ active: showProjectsPane })}
+                            aria-expanded={showProjectsPane}
+                            onClick={onProjectsClick}
+                        >Projects</button>
                     </li>
                     {/* External link-outs are desktop-only; hidden on mobile via .nav-link-external */}
                     <li className="nav-link nav-link-external">
