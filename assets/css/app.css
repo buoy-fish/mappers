@@ -1256,7 +1256,7 @@ body {
     position: fixed;
     top: 4rem;
     padding: 0 1rem;
-    max-width: calc(100% - 4.5rem);
+    max-width: calc(100% - 5.5rem);
   }
   /* Projects mirrors the Legend's mobile treatment: a fixed sheet pinned
      beneath the nav (the desktop pane lives inside .info-pane, which becomes
@@ -1268,7 +1268,7 @@ body {
     left: 0;
     right: 0;
     padding: 0 1rem;
-    max-width: calc(100% - 4.5rem);
+    max-width: calc(100% - 5.5rem);
     max-height: calc(100vh - 5rem);
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
@@ -1317,26 +1317,31 @@ body {
     /*allows us to split the div to top/bottom*/
     display: contents;
   }
-  /* Top edge, split by function: the brand and the sheet triggers sit on the
-     LEFT; the map's own instrument stack (theme / geolocate / zoom / compass)
-     owns the right. Right-aligned nav links collided with that stack on narrow
-     screens — `padding-right` keeps this band clear of it for good, including
-     the taller 5-button stack that appears on the Mapbox basemap. */
+  /* Mobile stacks the two systems vertically instead of interleaving them:
+     app chrome owns the top band (brand left, sheet triggers right — the same
+     identity/navigation relationship the desktop header states), and the map's
+     own instruments get their own band below it (see the ctrl-stack rule).
+     Crowding both into one band is what put the links under the theme button. */
   .pane-nav {
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
 
-    justify-content: flex-start;
     gap: 0.5rem;
 
     padding: 0.25rem 0.75rem;
-    padding-right: 3.75rem;
     border: none;
 
     width: auto;
     max-width: unset;
+  }
+  /* Instruments start below the chrome band, aligned with the top of the
+     sheets that open beside them. */
+  .maplibregl-ctrl-top-right,
+  .mapboxgl-ctrl-top-right {
+    top: 4rem;
+    right: 1rem;
   }
   .nav-links {
     display: flex;
