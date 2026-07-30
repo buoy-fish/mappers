@@ -1251,7 +1251,9 @@ body {
   /* Both sheets stop short of the instrument column on the right, the same
      split the header band uses — otherwise the top rows (and the Projects
      ▶ Timeline buttons) slide under the zoom/geolocate buttons on a narrow
-     screen. 4.5rem clears the 2.15rem-wide stack and its 1.25rem inset. */
+     screen. The stack is 2.15rem wide at a 1rem inset; 5.5rem leaves ~19-26px
+     of visible air beside it, measured at 320px and 390px. (4.5rem cleared it
+     by only ~6px — legal, but it read as a collision.) */
   .legend {
     position: fixed;
     top: 4rem;

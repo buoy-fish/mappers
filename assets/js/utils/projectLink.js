@@ -108,6 +108,37 @@ export function parseProjectLink(pathname) {
 }
 
 /**
+ * Decide whether the address bar should be rewritten to match the current view,
+ * and how. Returns `{ path, replace }` to navigate, or null to leave the URL
+ * alone. The whole mirror policy lives here, as one pure decision, so it can be
+ * tested without mounting the map.
+ *
+ * Three things can own the address bar instead of the view:
+ *   - `armed: false`   — an incoming deep-link is still resolving; rewriting now
+ *                        would erase the path before it has been applied.
+ *   - `sharedLinkOwnsUrl` — the visitor arrived on a shared timeline link
+ *                        (/?play=...), which owns the bar UNTIL they take an
+ *                        explicit view action. It must not be a mount-time
+ *                        constant: latching it forever meant such a session
+ *                        never updated its URL again.
+ *   - `hexId`          — an open hex pane owns /uplinks/hex/:id.
+ *
+ * `projectChanged` picks the history mode: moving to a different project is a
+ * navigation (push, so Back returns to the previous one); flipping a display
+ * toggle just restates the current view (replace).
+ */
+export function urlMirrorAction(state) {
+    const { armed, sharedLinkOwnsUrl, hexId, viewPath, currentPath, projectChanged } = state || {};
+    if (!armed) return null;
+    if (sharedLinkOwnsUrl) return null;
+    // react-router yields the literal string 'undefined' for an absent param on
+    // some paths — same guard the hex deep-link effect uses.
+    if (hexId != null && hexId !== 'undefined') return null;
+    if (viewPath === currentPath) return null;
+    return { path: viewPath, replace: !projectChanged };
+}
+
+/**
  * Build the canonical path for a view state: the project slug (when valid)
  * followed by every active flag in legend order. Returns '/' for the default
  * view. Path only — callers hand it straight to react-router's navigate().

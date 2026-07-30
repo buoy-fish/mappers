@@ -89,7 +89,11 @@ Everything the map shows is addressable, so any view can be copied out of the ad
 | `/uplinks/hex/:h3_index` | A single hex, info pane open |
 | `/?play=<project-code>&start=…&end=…&speed=…&loop=…&lat=…&lng=…&zoom=…` | Timeline bloom; built by the scrubber's Copy-link button |
 
-The codecs are pure and unit-tested: `assets/js/utils/projectLink.js` (path form, flag vocabulary, reserved prefixes) and `assets/js/utils/timelineLink.js` (query form). `Map.js` treats the URL as the source of truth in both directions — it applies an incoming path and mirrors state back out (project changes push history, toggles replace), which is what makes Back/Forward work between views. `MappersWeb.OgMeta` mirrors the flag/reserved vocabulary server-side to title link previews; keep the two lists in sync. The project routes are a catch-all declared LAST in the router, so every explicit route wins and `PageController` 404s reserved prefixes that fall through.
+Both codecs are pure and framework-free: `assets/js/utils/projectLink.js` (path form, flag vocabulary, reserved prefixes) and `assets/js/utils/timelineLink.js` (query form). Only `projectLink` has unit tests so far — `assets/test/projectLink.test.mjs`, which also covers `urlMirrorAction`, the decision of who owns the address bar; `timelineLink` is still verified by hand.
+
+`Map.js` treats the URL as the source of truth in both directions — it applies an incoming path and mirrors state back out (project changes push history, toggles replace), which is what makes Back/Forward work between views. A shared `?play=` link owns the address bar on arrival and hands it to the view on the visitor's first explicit action, so a timeline link isn't stripped on load *and* isn't stuck for the rest of the session.
+
+Server-side, `MappersWeb.DeepLink` is the single home for the flag and reserved-segment vocabulary, used by `OgMeta` (link-preview titles) and `MappersWeb.Plug.ReservedPaths`. It mirrors the JS lists, and `test/mappers_web/deep_link_test.exs` reads `projectLink.js` and fails if the two drift. The project routes are a catch-all declared LAST in the router, so every explicit route wins; `ReservedPaths` is piped in front of `:browser` for that scope only, early enough that a JSON client hitting an unmatched `/api/...` gets a 404 rather than the 406 `accepts ["html"]` would raise.
 
 Run the JS unit tests with `npm test --prefix assets` (node:test, no runner dependency).
 

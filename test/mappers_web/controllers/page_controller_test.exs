@@ -51,6 +51,29 @@ defmodule MappersWeb.PageControllerTest do
     end
   end
 
+  test "a JSON client gets a 404 on an unmatched API path, not a 406", %{conn: conn} do
+    # The guard has to run BEFORE the browser pipeline's `accepts ["html"]`,
+    # or content negotiation rejects the request first and a JSON client sees
+    # 406 Not Acceptable where it used to see a plain 404.
+    resp =
+      conn
+      |> put_req_header("accept", "application/json")
+      |> get("/api/v1/bogus")
+
+    assert resp.status == 404
+    assert resp.resp_body =~ "not_found"
+  end
+
+  test "a sub-path of a non-SPA route 404s instead of mounting the shell", %{conn: conn} do
+    # `get "/metrics"` matches only the exact path, so /metrics/anything used to
+    # fall through the catch-all and answer with the SPA shell and a 200.
+    # (/uplinks/* and, in dev/test, /dashboard/* are matched by their own
+    # earlier routes, so they never reach the catch-all either way.)
+    resp = get(conn, "/metrics/anything")
+    assert resp.status == 404
+    refute resp.resp_body =~ ~s(<div id="react-app">)
+  end
+
   test "GET a timeline deep-link emits tailored preview metadata", %{conn: conn} do
     html =
       conn

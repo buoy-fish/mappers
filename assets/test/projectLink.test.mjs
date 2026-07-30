@@ -7,7 +7,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseProjectLink, buildProjectPath, VIEW_FLAG_SLUGS } from '../js/utils/projectLink.js'
+import { parseProjectLink, buildProjectPath, urlMirrorAction, VIEW_FLAG_SLUGS } from '../js/utils/projectLink.js'
 
 const NONE = { project: null, showGateways: false, hideCoverage: false, showOtherHexes: false }
 
@@ -113,4 +113,60 @@ test('parse(build(state)) round-trips every flag combination', () => {
 
 test('the slug vocabulary is exported for the Elixir side to mirror', () => {
     assert.deepEqual(VIEW_FLAG_SLUGS, ['show-gateways', 'hide-coverage', 'show-mobile-hexes'])
+})
+
+// --- urlMirrorAction: who owns the address bar -------------------------------
+// The whole mirror policy as one pure decision, so it can be exercised without
+// mounting the map. Map.js had none of this under test, which is exactly how
+// the shared-link bug below shipped.
+
+const MIRROR = {
+    armed: true,
+    sharedLinkOwnsUrl: false,
+    hexId: null,
+    viewPath: '/gulf-of-nicoya',
+    currentPath: '/',
+    projectChanged: false,
+}
+
+test('mirror waits until an incoming deep-link has been applied', () => {
+    assert.equal(urlMirrorAction({ ...MIRROR, armed: false }), null)
+})
+
+test('a shared timeline link owns the address bar while it holds it', () => {
+    // Arriving on /?play=... must not have the path rewritten out from under
+    // the link — that would destroy the very URL the visitor was sent.
+    assert.equal(urlMirrorAction({ ...MIRROR, sharedLinkOwnsUrl: true }), null)
+})
+
+test('mirroring RESUMES once the shared link releases ownership', () => {
+    // Regression: ownership used to be captured once at mount, so any session
+    // that began at /?play=... never updated its URL again — pick a project
+    // after exiting the timeline and the address bar stayed on the old link.
+    assert.deepEqual(
+        urlMirrorAction({ ...MIRROR, sharedLinkOwnsUrl: false, projectChanged: true }),
+        { path: '/gulf-of-nicoya', replace: false }
+    )
+})
+
+test('an open hex pane owns the path', () => {
+    assert.equal(urlMirrorAction({ ...MIRROR, hexId: '8928308280fffff' }), null)
+    // react-router hands back the literal string 'undefined' for an absent
+    // param in some paths; that is not an open hex.
+    assert.deepEqual(urlMirrorAction({ ...MIRROR, hexId: 'undefined' }), { path: '/gulf-of-nicoya', replace: true })
+})
+
+test('no navigation when the URL already shows the view', () => {
+    assert.equal(urlMirrorAction({ ...MIRROR, currentPath: '/gulf-of-nicoya' }), null)
+})
+
+test('changing project pushes history; flipping a toggle replaces it', () => {
+    assert.deepEqual(
+        urlMirrorAction({ ...MIRROR, projectChanged: true }),
+        { path: '/gulf-of-nicoya', replace: false }
+    )
+    assert.deepEqual(
+        urlMirrorAction({ ...MIRROR, projectChanged: false }),
+        { path: '/gulf-of-nicoya', replace: true }
+    )
 })

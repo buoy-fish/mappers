@@ -23,7 +23,7 @@ import { uplinkTileServerLayer, uplinkHotspotsLineLayer, uplinkRelayLineLayer, u
 import { get } from '../data/Rest'
 import { getInitialProjects, fetchProjects } from '../utils/projects'
 import { parseTimelineLink, buildTimelineLink } from '../utils/timelineLink'
-import { parseProjectLink, buildProjectPath } from '../utils/projectLink'
+import { parseProjectLink, buildProjectPath, urlMirrorAction } from '../utils/projectLink'
 import { geoToH3, h3ToGeo, h3ToGeoBoundary } from "h3-js";
 import socket from "../socket";
 import geojson2h3 from 'geojson2h3';
@@ -619,6 +619,21 @@ function Map(props) {
     // intro placard.
     const isTimelineDeepLink = React.useMemo(() => !!parseTimelineLink(location.search), []); // eslint-disable-line react-hooks/exhaustive-deps
 
+    // A shared timeline link (/?play=...) owns the address bar on arrival, so
+    // the mirror doesn't strip the query string the visitor was sent. It holds
+    // that claim only until the visitor takes an explicit view action of their
+    // own — picking a project, launching a timeline, flipping a toggle — at
+    // which point the view they're building owns the URL. Latching this at
+    // mount (as a useMemo) meant such a session NEVER mirrored again: exit the
+    // timeline, pick a project, and the address bar stayed on the old link.
+    //
+    // Declared HERE, below `location`, not up with the other mirror state: the
+    // lazy initializer runs during the first render, so reading `location`
+    // before useLocation() has run throws a TDZ ReferenceError and the whole
+    // map fails to mount.
+    const [sharedLinkOwnsUrl, setSharedLinkOwnsUrl] = useState(isTimelineDeepLink);
+    const releaseUrlToView = useCallback(() => setSharedLinkOwnsUrl(false), []);
+
     // The view the URL asked for, captured ONCE at mount: a project slug and/or
     // display flags (see utils/projectLink.js). Null when the path belongs to
     // another route, e.g. a /uplinks/hex/:id deep-link.
@@ -1104,7 +1119,10 @@ function Map(props) {
         // Naming the project is what makes the view addressable: the mirror
         // effect turns it into /<project-code> in the address bar.
         setActiveProjectCode(project.code || null);
-    }, []);
+        // An explicit pick: from here the view owns the URL, even if this
+        // session arrived on a shared timeline link.
+        releaseUrlToView();
+    }, [releaseUrlToView]);
 
     // The URL drives the view: whenever the path is something OTHER than what
     // the current view already serializes to, apply it. That covers the initial
@@ -1164,21 +1182,31 @@ function Map(props) {
     }, [location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps -- the path is the input; viewPath/state are read, not tracked
 
     // Mirror the view into the address bar so the URL is always a shareable
-    // link. Two cases own the URL instead and are left untouched: an open hex
-    // pane (/uplinks/hex/:id — restored by onCloseHexPaneClick) and a timeline
-    // deep-link, whose ?play=... query string must survive. Choosing a
-    // different project is a real navigation (pushes, so Back returns to the
-    // previous one); flipping a display toggle rewrites the current entry.
+    // link. The policy — who owns the bar, and push vs replace — is
+    // urlMirrorAction() in utils/projectLink.js, unit-tested there; this effect
+    // is just the wiring that feeds it live state and performs the navigation.
+    // Display toggles. Named (rather than inline in the InfoPane props) so each
+    // one also hands the address bar to the view — flipping a toggle is an
+    // explicit view action, so a session that arrived on a shared timeline link
+    // starts mirroring from that point on.
+    const onToggleGateways = useCallback(() => { setShowGateways(v => !v); releaseUrlToView(); }, [releaseUrlToView]);
+    const onToggleCoverage = useCallback(() => { setHideCoverage(v => !v); releaseUrlToView(); }, [releaseUrlToView]);
+    const onToggleOtherHexes = useCallback(() => { setShowOtherHexes(v => !v); releaseUrlToView(); }, [releaseUrlToView]);
+
     const lastMirroredProjectRef = useRef(activeProjectCode);
     React.useEffect(() => {
-        if (!mirrorArmed) return;
-        if (isTimelineDeepLink) return;
-        if (routerParams.hexId != null && routerParams.hexId !== 'undefined') return;
         const projectChanged = lastMirroredProjectRef.current !== activeProjectCode;
         lastMirroredProjectRef.current = activeProjectCode;
-        if (viewPath === location.pathname) return;
-        navigate(viewPath, { replace: !projectChanged });
-    }, [mirrorArmed, viewPath, routerParams.hexId]); // eslint-disable-line react-hooks/exhaustive-deps
+        const action = urlMirrorAction({
+            armed: mirrorArmed,
+            sharedLinkOwnsUrl,
+            hexId: routerParams.hexId,
+            viewPath,
+            currentPath: location.pathname,
+            projectChanged,
+        });
+        if (action) navigate(action.path, { replace: action.replace });
+    }, [mirrorArmed, sharedLinkOwnsUrl, viewPath, routerParams.hexId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Core Timeline launcher: fly to the project's framed view, enter Timeline
     // mode, and queue the deterministic bloom over [start, end]. All knobs are
@@ -1216,7 +1244,11 @@ function Map(props) {
             projectCode: project.code, lat: project.lat, lng: project.lng, zoom: project.zoom || 12,
             start, end, speed: cfg.speed || 1, baseline: false, loop: false, open: false,
         });
-    }, [launchTimeline]);
+        // Released HERE rather than in launchTimeline, which the arriving
+        // ?play= deep-link also calls — releasing there would rewrite the
+        // shared link's URL the instant it opened.
+        releaseUrlToView();
+    }, [launchTimeline, releaseUrlToView]);
 
     // Shareable deep-link: on mount, if the URL carries ?play=<project-code>,
     // resolve the project and launch the timeline with URL-derived values
@@ -1428,7 +1460,7 @@ function Map(props) {
                 }
 
             </MapGL>
-            <InfoPane hexId={hexId} bestRssi={bestRssi} snr={snr} uplinks={uplinks} gatewayRecords={gatewayRecords} showHexPane={showHexPane} onCloseHexPaneClick={onCloseHexPaneClick} showHexPaneCloseButton={showHexPaneCloseButton} showGateways={showGateways} onToggleGateways={() => setShowGateways(!showGateways)} hideCoverage={hideCoverage} onToggleCoverage={() => setHideCoverage(!hideCoverage)} showOtherHexes={showOtherHexes} onToggleOtherHexes={() => setShowOtherHexes(!showOtherHexes)} onFlyToProject={onFlyToProject} onRunProjectTimeline={onRunProjectTimeline} timelineConfig={TIMELINE_PROJECT_CONFIG} />
+            <InfoPane hexId={hexId} bestRssi={bestRssi} snr={snr} uplinks={uplinks} gatewayRecords={gatewayRecords} showHexPane={showHexPane} onCloseHexPaneClick={onCloseHexPaneClick} showHexPaneCloseButton={showHexPaneCloseButton} showGateways={showGateways} onToggleGateways={onToggleGateways} hideCoverage={hideCoverage} onToggleCoverage={onToggleCoverage} showOtherHexes={showOtherHexes} onToggleOtherHexes={onToggleOtherHexes} onFlyToProject={onFlyToProject} onRunProjectTimeline={onRunProjectTimeline} timelineConfig={TIMELINE_PROJECT_CONFIG} />
             {timelineMode && timeDomain.minT !== null && timeDomain.maxT !== null &&
                 <TimelineControl
                     minT={timeDomain.minT}
