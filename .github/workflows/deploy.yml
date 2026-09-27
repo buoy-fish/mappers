@@ -16,6 +16,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Test post-deploy check script
+        run: bash scripts/test/post-deploy-check.test.sh
+
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
@@ -111,3 +114,14 @@ jobs:
           # Copy script to server and execute it (properly propagates exit code)
           scp -i ~/.ssh/buoy-fish-deploy.pem -o StrictHostKeyChecking=no /tmp/deploy-mapper.sh ubuntu@app.buoy.fish:/tmp/deploy-mapper.sh
           ssh -i ~/.ssh/buoy-fish-deploy.pem -o StrictHostKeyChecking=no ubuntu@app.buoy.fish 'bash /tmp/deploy-mapper.sh'
+
+      # buoy-fish/monitoring#42: `systemctl is-active` only proves a process
+      # exists. These assert the real, newly built mapper is answering. See
+      # scripts/post-deploy-check.sh for what each check proves.
+      - name: Post-deploy health check (origin, on the box)
+        run: |
+          ssh -i ~/.ssh/buoy-fish-deploy.pem -o StrictHostKeyChecking=no ubuntu@app.buoy.fish \
+            'cd /home/ubuntu/map.buoy.fish && bash scripts/post-deploy-check.sh --base-url http://127.0.0.1:4001 --manifest priv/static/cache_manifest.json --timeout 180'
+
+      - name: Post-deploy health check (public, through Cloudflare + nginx)
+        run: bash scripts/post-deploy-check.sh --base-url https://map.buoy.fish --skip-version-check --timeout 60
