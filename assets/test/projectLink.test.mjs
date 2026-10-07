@@ -187,3 +187,12 @@ test('changing project pushes history; flipping a toggle replaces it', () => {
         { path: '/gulf-of-nicoya', replace: true }
     )
 })
+
+test('a segment named like an Object.prototype key is treated as a project slug, not a flag', () => {
+    // FLAG_KEYS is a plain object: "constructor" or "__proto__" used to
+    // resolve to inherited members (and a non-iterable crashed the page).
+    for (const seg of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+        const link = parseProjectLink(`/${seg}`)
+        assert.deepEqual({ ...link, project: null }, NONE, `${seg} must set no flag`)
+    }
+})

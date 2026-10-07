@@ -99,7 +99,11 @@ export function parseProjectLink(pathname) {
     let project = null;
     let projectSeen = false;
     for (const segment of segments) {
-        const keys = FLAG_KEYS[segment.toLowerCase()];
+        // Own keys only: a plain-object lookup would hand back inherited
+        // members for "constructor" / "__proto__" (a crafted link crashed the
+        // page iterating them).
+        const slug = segment.toLowerCase();
+        const keys = Object.hasOwn(FLAG_KEYS, slug) ? FLAG_KEYS[slug] : null;
         if (keys) {
             for (const key of keys) flags[key] = true;
             continue;
