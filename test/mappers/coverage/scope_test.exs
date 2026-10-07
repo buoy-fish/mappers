@@ -141,65 +141,94 @@ defmodule Mappers.Coverage.ScopeTest do
     dead = :scope_test_never_started
 
     assert Scope.permanent_hex_ids(dead) == :unavailable
-    assert Scope.classify_hotspots([%{"gateway_id" => "0016c001f1399e45"}], dead) == :unknown
+    assert Scope.hotspot_class([%{"gateway_id" => "0016c001f1399e45"}], dead) == :unknown
 
     rows = [%{id: "8948469b0b1ffff"}]
     assert Scope.filter_rows(rows, :permanent, & &1.id, dead) == rows
     assert Scope.filter_rows(rows, :other, & &1.id, dead) == rows
   end
 
-  describe "classify_hotspots/2" do
-    test "true when any hotspot matches a permanent gateway identity" do
+  describe "hotspot_class/2 (identity dimensions)" do
+    test ":permanent when any hotspot matches a permanent gateway identity" do
       {inv, scope} = start_pair!()
       stub_inventory!(inv, feed())
 
-      assert Scope.classify_hotspots(
+      assert Scope.hotspot_class(
                [%{"name" => "unknown", "gateway_id" => "0016C001F1399E45"}],
                scope
-             ) == true
+             ) == :permanent
 
-      assert Scope.classify_hotspots(
+      assert Scope.hotspot_class(
                [%{"name" => "unknown", "gateway_id" => "x", "relay_gateway_id" => "BBBB0000000000B1"}],
                scope
-             ) == true
+             ) == :permanent
 
-      assert Scope.classify_hotspots(
+      assert Scope.hotspot_class(
                [%{"name" => "Bahia Tortuga Town", "gateway_id" => "646cb99320d8e64b"}],
                scope
-             ) == true
+             ) == :permanent
 
-      assert Scope.classify_hotspots(
+      assert Scope.hotspot_class(
                [%{"name" => "unknown", "gateway_id" => "ab12cd340a1b2c3d"}],
                scope
-             ) == true
+             ) == :permanent
     end
 
-    test "true for the device_only placeholder (device-GPS-only coverage is permanent)" do
+    test ":permanent for the device_only placeholder (device-GPS-only coverage is permanent)" do
       {inv, scope} = start_pair!()
       stub_inventory!(inv, feed())
 
-      assert Scope.classify_hotspots(
+      assert Scope.hotspot_class(
                [%{"id" => "device_only", "name" => "device_only"}],
                scope
-             ) == true
+             ) == :permanent
     end
 
-    test "false when no hotspot matches (bench gateways included)" do
+    test ":none when no hotspot matches (bench gateways included)" do
       {inv, scope} = start_pair!()
       stub_inventory!(inv, feed())
 
-      assert Scope.classify_hotspots(
+      assert Scope.hotspot_class(
                [%{"name" => "Costa Rica Indoor 1", "gateway_id" => "ecececececececec"}],
                scope
-             ) == false
+             ) == :none
 
-      assert Scope.classify_hotspots([], scope) == false
+      assert Scope.hotspot_class([], scope) == :none
     end
 
     test ":unknown when the inventory never loaded" do
       {_inv, scope} = start_pair!()
 
-      assert Scope.classify_hotspots([%{"gateway_id" => "0016c001f1399e45"}], scope) == :unknown
+      assert Scope.hotspot_class([%{"gateway_id" => "0016c001f1399e45"}], scope) == :unknown
+    end
+  end
+
+  describe "hotspot_class/2" do
+    defp feed_with_mobile do
+      feed() ++ [%{"gateway_eui" => "F00DF00DF00DF00D", "name" => "Vessel GW", "mobile" => true}]
+    end
+
+    test "permanent beats mobile; mobile beats nothing; bench and unknown are :none" do
+      {inv, scope} = start_pair!()
+      stub_inventory!(inv, feed_with_mobile())
+
+      assert Scope.hotspot_class([%{"gateway_id" => "0016c001f1399e45"}], scope) == :permanent
+
+      assert Scope.hotspot_class(
+               [%{"gateway_id" => "f00df00df00df00d"}, %{"gateway_id" => "0016c001f1399e45"}],
+               scope
+             ) == :permanent
+
+      assert Scope.hotspot_class([%{"gateway_id" => "F00DF00DF00DF00D"}], scope) == :mobile
+      assert Scope.hotspot_class([%{"name" => "Vessel GW", "gateway_id" => "x"}], scope) == :mobile
+      assert Scope.hotspot_class([%{"gateway_id" => "ecececececececec"}], scope) == :none
+      assert Scope.hotspot_class([%{"gateway_id" => "1234567812345678"}], scope) == :none
+    end
+
+    test ":unknown when the inventory never loaded" do
+      {_inv, scope} = start_pair!()
+
+      assert Scope.hotspot_class([%{"gateway_id" => "f00df00df00df00d"}], scope) == :unknown
     end
   end
 end

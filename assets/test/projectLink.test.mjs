@@ -7,9 +7,9 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseProjectLink, buildProjectPath, urlMirrorAction, VIEW_FLAG_SLUGS } from '../js/utils/projectLink.js'
+import { parseProjectLink, buildProjectPath, urlMirrorAction, VIEW_FLAG_SLUGS, LEGACY_FLAG_SLUGS } from '../js/utils/projectLink.js'
 
-const NONE = { project: null, showGateways: false, hideCoverage: false, showOtherHexes: false }
+const NONE = { project: null, includeMobile: false, showGateways: false, hideCoverage: false }
 
 test('bare root is a view link with nothing set', () => {
     assert.deepEqual(parseProjectLink('/'), NONE)
@@ -27,13 +27,13 @@ test('a lone segment is the project slug', () => {
 
 test('flag segments set their toggle', () => {
     assert.deepEqual(parseProjectLink('/gulf-of-nicoya/show-gateways'), {
-        project: 'gulf-of-nicoya', showGateways: true, hideCoverage: false, showOtherHexes: false,
+        project: 'gulf-of-nicoya', showGateways: true, hideCoverage: false, includeMobile: false,
     })
 })
 
 test('flag order does not matter and flags may precede the project', () => {
     const expected = {
-        project: 'gulf-of-nicoya', showGateways: true, hideCoverage: true, showOtherHexes: false,
+        project: 'gulf-of-nicoya', showGateways: true, hideCoverage: true, includeMobile: false,
     }
     assert.deepEqual(parseProjectLink('/gulf-of-nicoya/show-gateways/hide-coverage'), expected)
     assert.deepEqual(parseProjectLink('/hide-coverage/gulf-of-nicoya/show-gateways'), expected)
@@ -44,11 +44,27 @@ test('nested flags imply their parents', () => {
     // mobile hexes only once coverage is hidden — so a link naming a child
     // flag must switch its parents on, or Map.js would reset it immediately.
     assert.deepEqual(parseProjectLink('/gulf-of-nicoya/hide-coverage'), {
-        project: 'gulf-of-nicoya', showGateways: true, hideCoverage: true, showOtherHexes: false,
+        project: 'gulf-of-nicoya', showGateways: true, hideCoverage: true, includeMobile: false,
     })
-    assert.deepEqual(parseProjectLink('/gulf-of-nicoya/show-mobile-hexes'), {
-        project: 'gulf-of-nicoya', showGateways: true, hideCoverage: true, showOtherHexes: true,
+})
+
+test('include-mobile stands alone: it implies and is implied by nothing', () => {
+    assert.deepEqual(parseProjectLink('/include-mobile'), { ...NONE, includeMobile: true })
+    assert.deepEqual(parseProjectLink('/gulf-of-nicoya/include-mobile/hide-coverage'), {
+        project: 'gulf-of-nicoya', includeMobile: true, showGateways: true, hideCoverage: true,
     })
+})
+
+test('a legacy show-mobile-hexes link opens mobile coverage with the gateways', () => {
+    // Mobile hexes now draw within coverage itself, so Hide Coverage would hide
+    // them too: the old "mobile hexes on a bare map" view maps to coverage
+    // including mobile, with gateways shown.
+    const legacy = parseProjectLink('/gulf-of-nicoya/show-mobile-hexes')
+    assert.deepEqual(legacy, {
+        project: 'gulf-of-nicoya', includeMobile: true, showGateways: true, hideCoverage: false,
+    })
+    // ...and is rewritten to the current vocabulary, never re-emitted.
+    assert.equal(buildProjectPath(legacy), '/gulf-of-nicoya/include-mobile/show-gateways')
 })
 
 test('flags work without a project', () => {
@@ -64,7 +80,7 @@ test('reserved paths are not view links', () => {
 
 test('only the first non-flag segment counts; junk is ignored', () => {
     assert.deepEqual(parseProjectLink('/gulf-of-nicoya/whatever/show-gateways'), {
-        project: 'gulf-of-nicoya', showGateways: true, hideCoverage: false, showOtherHexes: false,
+        project: 'gulf-of-nicoya', showGateways: true, hideCoverage: false, includeMobile: false,
     })
     // A syntactically invalid slug is dropped rather than trusted.
     assert.deepEqual(parseProjectLink('/../etc/passwd'), NONE)
@@ -79,14 +95,14 @@ test('build emits the canonical path', () => {
         '/gulf-of-nicoya/show-gateways'
     )
     assert.equal(
-        buildProjectPath({ project: 'gulf-of-nicoya', showGateways: true, hideCoverage: true, showOtherHexes: true }),
-        '/gulf-of-nicoya/show-gateways/hide-coverage/show-mobile-hexes'
+        buildProjectPath({ project: 'gulf-of-nicoya', includeMobile: true, showGateways: true, hideCoverage: true }),
+        '/gulf-of-nicoya/include-mobile/show-gateways/hide-coverage'
     )
     assert.equal(buildProjectPath({ showGateways: true }), '/show-gateways')
     // Flags are emitted in legend order regardless of key order in.
     assert.equal(
-        buildProjectPath({ showOtherHexes: true, showGateways: true, hideCoverage: true }),
-        '/show-gateways/hide-coverage/show-mobile-hexes'
+        buildProjectPath({ hideCoverage: true, showGateways: true, includeMobile: true }),
+        '/include-mobile/show-gateways/hide-coverage'
     )
     // Build normalizes the same implications parse does.
     assert.equal(buildProjectPath({ hideCoverage: true }), '/show-gateways/hide-coverage')
@@ -98,8 +114,8 @@ test('parse(build(state)) round-trips every flag combination', () => {
     for (const project of [null, 'gulf-of-nicoya']) {
         for (const showGateways of [false, true]) {
             for (const hideCoverage of [false, true]) {
-                for (const showOtherHexes of [false, true]) {
-                    const state = { project, showGateways, hideCoverage, showOtherHexes }
+                for (const includeMobile of [false, true]) {
+                    const state = { project, includeMobile, showGateways, hideCoverage }
                     const path = buildProjectPath(state)
                     const back = parseProjectLink(path)
                     // Both sides normalize identically, so re-building from the
@@ -112,7 +128,8 @@ test('parse(build(state)) round-trips every flag combination', () => {
 })
 
 test('the slug vocabulary is exported for the Elixir side to mirror', () => {
-    assert.deepEqual(VIEW_FLAG_SLUGS, ['show-gateways', 'hide-coverage', 'show-mobile-hexes'])
+    assert.deepEqual(VIEW_FLAG_SLUGS, ['include-mobile', 'show-gateways', 'hide-coverage'])
+    assert.deepEqual(LEGACY_FLAG_SLUGS, ['show-mobile-hexes'])
 })
 
 // --- urlMirrorAction: who owns the address bar -------------------------------
@@ -169,4 +186,13 @@ test('changing project pushes history; flipping a toggle replaces it', () => {
         urlMirrorAction({ ...MIRROR, projectChanged: false }),
         { path: '/gulf-of-nicoya', replace: true }
     )
+})
+
+test('a segment named like an Object.prototype key is treated as a project slug, not a flag', () => {
+    // FLAG_KEYS is a plain object: "constructor" or "__proto__" used to
+    // resolve to inherited members (and a non-iterable crashed the page).
+    for (const seg of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+        const link = parseProjectLink(`/${seg}`)
+        assert.deepEqual({ ...link, project: null }, NONE, `${seg} must set no flag`)
+    }
 })

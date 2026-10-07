@@ -23,9 +23,11 @@ defmodule MappersWeb.API.V1.HexController do
   so the cache stays correct).
 
   `scope` narrows the set by contributing gateway: `permanent` (default, also
-  any unknown value), `other` (the complement — hexes with no permanent
-  contributor), `all` (unfiltered). Fail-open: when classification is
-  unavailable every scope serves all rows.
+  any unknown value), `mobile` (heard by a mobile gateway and by no permanent
+  one), `other` (the complement of permanent — hexes with no permanent
+  contributor), `all` (unfiltered). When classification is unavailable,
+  permanent/other/all fail open (all rows) and `mobile` fails closed (none):
+  it is an overlay, and all rows would repaint the whole map.
   """
   def index(conn, params) do
     rows =

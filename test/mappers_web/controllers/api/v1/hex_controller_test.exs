@@ -120,6 +120,55 @@ defmodule MappersWeb.API.V1.HexControllerTest do
       assert Enum.sort(hex_ids(conn, "/api/v1/hexes")) == [@permanent_hex, @bench_hex]
     end
 
+    # Mobile gateways come in the app feed with no coordinates and
+    # `mobile: true` (ADR-0035); their coverage is its own scope, shown only
+    # when the visitor includes it. Bench coverage is in no UI scope.
+    @mobile_hex "8948469b0bdffff"
+    @mobile_and_permanent_hex "8948469b0bfffff"
+
+    defp seed_with_mobile! do
+      seed_scoped!()
+      insert_hex!(%{id: @mobile_hex})
+      insert_hex!(%{id: @mobile_and_permanent_hex})
+      CoverageFixtures.hear_in_hex!(@mobile_hex, %{gateway_id: "f00df00df00df00d"})
+      CoverageFixtures.hear_in_hex!(@mobile_and_permanent_hex, %{gateway_id: "f00df00df00df00d"})
+      CoverageFixtures.hear_in_hex!(@mobile_and_permanent_hex, %{gateway_id: "ac1f09fffe000001"})
+
+      Application.put_env(
+        :mappers,
+        :inventory_stub_response,
+        {:ok,
+         [
+           %{"gateway_eui" => "AC1F09FFFE000001", "name" => "Harbor Master", "location_phase" => "permanent"},
+           %{"gateway_eui" => "ECECECECECECECEC", "name" => "Bench GW", "location_phase" => "bench_test"},
+           %{"gateway_eui" => "F00DF00DF00DF00D", "name" => "Vessel GW", "location_phase" => nil, "mobile" => true}
+         ]}
+      )
+
+      Inventory.refresh()
+      Mappers.Coverage.Scope.reset()
+    end
+
+    test "scope=mobile serves hexes heard by a mobile gateway and by no permanent one", %{conn: conn} do
+      seed_with_mobile!()
+
+      assert hex_ids(conn, "/api/v1/hexes?scope=mobile") == [@mobile_hex]
+    end
+
+    test "a mobile gateway is never counted as permanent, and bench is in neither UI scope", %{conn: conn} do
+      seed_with_mobile!()
+
+      assert Enum.sort(hex_ids(conn, "/api/v1/hexes")) == [@permanent_hex, @mobile_and_permanent_hex]
+      refute @bench_hex in hex_ids(conn, "/api/v1/hexes?scope=mobile")
+    end
+
+    test "scope=mobile serves nothing when the inventory never loaded (never paints everything as mobile)",
+         %{conn: conn} do
+      insert_hex!(%{id: @mobile_hex})
+
+      assert hex_ids(conn, "/api/v1/hexes?scope=mobile") == []
+    end
+
     test "keeps the cache-control header on scoped responses", %{conn: conn} do
       seed_scoped!()
 

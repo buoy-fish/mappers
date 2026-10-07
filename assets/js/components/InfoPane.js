@@ -229,6 +229,27 @@ function InfoPane(props) {
                         </div>
                     </div>
 
+                    {/* Include mobile coverage (ADR-0035): opt-in, because mobile
+                        coverage moves with the gateway and can't be relied on.
+                        Once on, mobile hexes draw like the rest of coverage. */}
+                    <div className="legend-line gateway-toggle-line">
+                        <label className="gateway-toggle">
+                            <button
+                                role="switch"
+                                aria-checked={props.includeMobile}
+                                onClick={props.onToggleIncludeMobile}
+                                className={`gateway-switch ${props.includeMobile ? 'active' : ''}`}
+                            >
+                                <span className="gateway-switch-knob" />
+                            </button>
+                            <span>Include mobile coverage</span>
+                        </label>
+                    </div>
+                    {props.includeMobile &&
+                        <div className="legend-line legend-note">
+                            <span>Mobile coverage moves with its gateway and can't be relied on.</span>
+                        </div>
+                    }
                     <div className="legend-line gateway-toggle-line">
                         <label className="gateway-toggle">
                             <button
@@ -259,26 +280,6 @@ function InfoPane(props) {
                                     <span>Hide Coverage</span>
                                 </label>
                             </div>
-                            {/* Inspection mode: only offered once coverage is
-                                hidden — it paints the non-permanent (mobile/
-                                bench) gateway hexes purple against the bare
-                                basemap. Map.js force-closes it when either
-                                parent toggle turns off. */}
-                            {props.hideCoverage &&
-                                <div className="legend-line gateway-toggle-line">
-                                    <label className="gateway-toggle">
-                                        <button
-                                            role="switch"
-                                            aria-checked={props.showOtherHexes}
-                                            onClick={props.onToggleOtherHexes}
-                                            className={`gateway-switch ${props.showOtherHexes ? 'active' : ''}`}
-                                        >
-                                            <span className="gateway-switch-knob" />
-                                        </button>
-                                        <span>Show mobile gateway hexes</span>
-                                    </label>
-                                </div>
-                            }
                         </React.Fragment>
                     }
                 </div>

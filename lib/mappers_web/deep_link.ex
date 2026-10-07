@@ -14,7 +14,9 @@ defmodule MappersWeb.DeepLink do
 
   # Display-toggle segments. Skipped when looking for the project slug, so
   # `/gulf-of-nicoya/show-gateways` still titles as the project.
-  @flag_slugs ~w(show-gateways hide-coverage show-mobile-hexes)
+  @flag_slugs ~w(include-mobile show-gateways hide-coverage)
+  # Old flag segments still parsed (never emitted), skipped the same way.
+  @legacy_flag_slugs ~w(show-mobile-hexes)
 
   # First path segments owned by something other than a project view: existing
   # SPA routes, API scopes, the tile proxy, and the prefixes Plug.Static serves.
@@ -30,6 +32,9 @@ defmodule MappersWeb.DeepLink do
 
   @doc "Display-toggle slugs, in legend order."
   def flag_slugs, do: @flag_slugs
+
+  @doc "Retired display-toggle slugs, still recognised in old links."
+  def legacy_flag_slugs, do: @legacy_flag_slugs
 
   @doc "First path segments that belong to another route."
   def reserved_segments, do: @reserved_segments
@@ -56,7 +61,7 @@ defmodule MappersWeb.DeepLink do
       nil
     else
       segments
-      |> Enum.reject(&(&1 in @flag_slugs))
+      |> Enum.reject(&(&1 in @flag_slugs or &1 in @legacy_flag_slugs))
       |> List.first()
       |> valid_slug()
     end

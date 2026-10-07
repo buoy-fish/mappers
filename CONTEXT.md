@@ -18,9 +18,10 @@ Coverage restricted to hexes with at least one contributor that is a
 permanently-installed gateway, plus device-GPS-only hexes (uplinks recorded
 without a usable gateway position — still confirmed, real reception). This is
 what the map and Timeline serve by default (`scope=permanent`). Hexes heard
-only by mobile or bench/test gateways are excluded from the default footprint
-and visible via the "Show mobile gateway hexes" inspection toggle
-(`scope=other`).
+only by mobile or bench/test gateways are excluded from the default footprint.
+Mobile coverage joins the map, drawn like the rest of coverage, when the visitor
+turns on **Include mobile coverage** (`scope=mobile`); bench coverage is never
+shown.
 _Avoid_: Calling the default view "all coverage" — it is deliberately the
 installed footprint.
 

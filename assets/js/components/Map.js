@@ -19,11 +19,12 @@ import GatewayTooltip from "../components/GatewayTooltip"
 import ThemeControl from "../components/ThemeControl"
 import WelcomeModal from "../components/WelcomeModal"
 import TimelineControl, { startOfLocalDay, endOfLocalDay } from "../components/TimelineControl"
-import { uplinkTileServerLayer, uplinkHotspotsLineLayer, uplinkRelayLineLayer, uplinkHotspotsCircleLayer, uplinkHotspotsHexLayer, uplinkChannelLayer, gatewayMarkerLayer, gatewayLabelLayer, selectedHexLayer, timelineRevealLayer, timelineBaselineLayer, otherHexLayer } from './Layers.js';
+import { uplinkTileServerLayer, uplinkHotspotsLineLayer, uplinkRelayLineLayer, uplinkHotspotsCircleLayer, uplinkHotspotsHexLayer, uplinkChannelLayer, gatewayMarkerLayer, gatewayLabelLayer, selectedHexLayer, timelineRevealLayer, timelineBaselineLayer } from './Layers.js';
 import { get } from '../data/Rest'
 import { getInitialProjects, fetchProjects } from '../utils/projects'
 import { parseTimelineLink, buildTimelineLink } from '../utils/timelineLink'
 import { parseProjectLink, buildProjectPath, urlMirrorAction } from '../utils/projectLink'
+import { liveHexLayer, showsGatewayMarker, mergeHexFeatures, coverageFeatures } from '../utils/coverageClass'
 import { geoToH3, h3ToGeo, h3ToGeoBoundary } from "h3-js";
 import socket from "../socket";
 import geojson2h3 from 'geojson2h3';
@@ -286,20 +287,30 @@ function Map(props) {
     const [gatewayRecords, setGatewayRecords] = useState({});
     const [showGateways, setShowGateways] = useState(false);
     const [hideCoverage, setHideCoverage] = useState(false);
-    // Inspection mode: paint the NON-permanent ("other") gateway hexes purple
-    // while normal coverage is hidden. Only reachable when Show Gateways and
-    // Hide Coverage are both on (the toggle is nested under them in the
-    // legend); the reset effect below force-closes it when either turns off.
-    const [showOtherHexes, setShowOtherHexes] = useState(false);
-    const [otherHexGeoJson, setOtherHexGeoJson] = useState(emptyFC);
-    // Mirrors showOtherHexes for the once-created h3:new channel handler
+    // "Include mobile coverage" (ADR-0035): adds hexes heard by MOBILE
+    // gateways (and by no permanent one) to the coverage source itself, so
+    // they draw exactly like the rest of coverage (RSSI colors, hover,
+    // selection). Opt-in because mobile coverage moves and can't be relied
+    // on. Bench coverage is in no layer. Hide Coverage hides it with the rest.
+    const [includeMobile, setIncludeMobile] = useState(false);
+    const [mobileHexGeoJson, setMobileHexGeoJson] = useState(emptyFC);
+    // Mirrors includeMobile for the once-created h3:new channel handler
     // (same pattern as timelineModeRef). Declared AFTER the state it mirrors
     // to dodge the minifier TDZ gotcha.
-    const showOtherHexesRef = useRef(false);
-    React.useEffect(() => { showOtherHexesRef.current = showOtherHexes; }, [showOtherHexes]);
-    React.useEffect(() => {
-        if (!hideCoverage || !showGateways) setShowOtherHexes(false);
-    }, [hideCoverage, showGateways]);
+    const includeMobileRef = useRef(false);
+    React.useEffect(() => { includeMobileRef.current = includeMobile; }, [includeMobile]);
+    // Set once the scope=mobile fetch has succeeded; a failed fetch leaves it
+    // false so the next toggle-on retries (live hexes alone don't count).
+    const mobileLoadedRef = useRef(false);
+    // What the coverage source draws (utils/coverageClass.js).
+    const coverageGeoJson = React.useMemo(
+        () => coverageFeatures(hexGeoJson, mobileHexGeoJson, includeMobile),
+        [hexGeoJson, mobileHexGeoJson, includeMobile]
+    );
+    // Hide Coverage is only offered while Show Gateways is on (InfoPane), so
+    // turning gateways off must release it, or coverage stays hidden with no
+    // control to bring it back (projectLink.js relies on this invariant).
+    React.useEffect(() => { if (!showGateways) setHideCoverage(false); }, [showGateways]);
     // ------------------------------------------------------------------
     // Shareable view URL. `activeProjectCode` is the project the current view
     // is framed on (set by the Projects pane, a ▶ Timeline launch, or a
@@ -311,8 +322,8 @@ function Map(props) {
     // ------------------------------------------------------------------
     const [activeProjectCode, setActiveProjectCode] = useState(null);
     const viewPath = React.useMemo(
-        () => buildProjectPath({ project: activeProjectCode, showGateways, hideCoverage, showOtherHexes }),
-        [activeProjectCode, showGateways, hideCoverage, showOtherHexes]
+        () => buildProjectPath({ project: activeProjectCode, includeMobile, showGateways, hideCoverage }),
+        [activeProjectCode, includeMobile, showGateways, hideCoverage]
     );
     // The URL is only mirrored once any incoming deep-link has been applied —
     // otherwise the first mirror pass (before the project resolves) would
@@ -644,7 +655,7 @@ function Map(props) {
     // opening a shared project link wants the coverage, not the intro placard.
     const isProjectDeepLink = !!initialViewIntent && (
         !!initialViewIntent.project || initialViewIntent.showGateways ||
-        initialViewIntent.hideCoverage || initialViewIntent.showOtherHexes
+        initialViewIntent.hideCoverage || initialViewIntent.includeMobile
     );
 
     // Load hex data from the Phoenix API (replaces Martin tile server). The
@@ -679,15 +690,13 @@ function Map(props) {
         fetch('/api/v1/gateways')
             .then(res => res.json())
             .then(data => {
-                // Markers show only PERMANENT installations. A missing
-                // location_phase (older app.buoy.fish API) means permanent —
-                // fail-open keeps the map at status quo across the deploy gap.
-                // gatewayRecords below stays UNFILTERED: hex-detail tables must
-                // resolve names for every gateway that ever heard an uplink,
-                // bench/mobile included.
-                const permanentGateways = (data.gateways || []).filter(
-                    gw => (gw.location_phase ?? "permanent") === "permanent"
-                );
+                // Markers show only PERMANENT installations with a position
+                // (showsGatewayMarker: a missing location_phase from an older
+                // app.buoy.fish API is permanent, fail-open; mobile gateways
+                // have no fixed position). gatewayRecords below stays
+                // UNFILTERED: hex-detail tables must resolve names for every
+                // gateway that ever heard an uplink, bench/mobile included.
+                const permanentGateways = (data.gateways || []).filter(showsGatewayMarker);
                 const features = permanentGateways.map(gw => ({
                     type: "Feature",
                     geometry: {
@@ -755,16 +764,14 @@ function Map(props) {
             .catch(err => console.error('Failed to load timeline data:', err));
     }, [timelineMode]);
 
-    // Non-permanent ("other") hex fetch. Lazy: triggered the first time
-    // inspection mode turns on, then cached (same refetch guard as the
-    // timeline fetch above). The endpoint returns the same compact positional
+    // Mobile hex fetch. Lazy: triggered the first time mobile coverage is
+    // included, then cached (same refetch guard as the timeline fetch above). The endpoint returns the same compact positional
     // array as /api/v1/hexes, mapped through the same geojson2h3 call so the
     // sources stay identical. A non-array body (error JSON from an older
     // server, an HTML error page) is treated as empty rather than crashing.
     React.useEffect(() => {
-        if (!showOtherHexes) return;
-        if (otherHexGeoJson.features && otherHexGeoJson.features.length > 0) return;
-        fetch('/api/v1/hexes?scope=other')
+        if (!includeMobile || mobileLoadedRef.current) return;
+        fetch('/api/v1/hexes?scope=mobile')
             .then(res => res.json())
             .then(rows => {
                 if (!Array.isArray(rows)) return;
@@ -773,10 +780,12 @@ function Map(props) {
                     f.id = idStr;
                     return f;
                 });
-                setOtherHexGeoJson({ type: "FeatureCollection", features });
+                mobileLoadedRef.current = true;
+                // Merge with any live hexes that arrived while this was in flight.
+                setMobileHexGeoJson(prev => mergeHexFeatures(features, prev.features));
             })
-            .catch(err => console.error('Failed to load other-hex data:', err));
-    }, [showOtherHexes]);
+            .catch(err => console.error('Failed to load mobile-hex data:', err));
+    }, [includeMobile]);
 
     React.useEffect(() => {
         if (!initComplete && location.pathname != lastPath) {
@@ -787,24 +796,19 @@ function Map(props) {
                 // view doesn't twitch as live uplinks land. timelineModeRef is a
                 // ref (not state) because this handler closure is created once.
                 if (timelineModeRef.current) return;
-                // `permanent` is new on the payload; older servers omit it and
-                // missing means permanent, matching the marker filter's
-                // fail-open. Non-permanent hexes never join the orange live
-                // layer — when inspection mode is on they are appended to the
-                // purple other-hex collection instead, otherwise dropped (the
-                // lazy scope=other fetch covers anything that lands before the
-                // first toggle-on; later live drops reappear on page reload).
-                if (payload.body.permanent === false) {
-                    if (showOtherHexesRef.current) {
-                        const other = geojson2h3.h3ToFeature(payload.body.id_string, { 'id': payload.body.id_string, 'id_string': payload.body.id_string, 'best_rssi': payload.body.best_rssi, 'snr': payload.body.snr })
-                        other.id = payload.body.id_string
-                        setOtherHexGeoJson(prev => ({
-                            "type": "FeatureCollection",
-                            "features": [...(prev.features || []), other]
-                        }))
-                    }
-                    return;
+                // liveHexLayer (utils/coverageClass.js): permanent hexes join the
+                // orange live layer; mobile ones join the purple mobile layer
+                // when mobile coverage is included; everything else (bench,
+                // unknown, or mobile while excluded) is dropped. The lazy
+                // scope=mobile fetch covers anything that lands before the first
+                // toggle-on; later drops reappear on page reload.
+                const layer = liveHexLayer(payload.body, includeMobileRef.current);
+                if (layer === 'mobile') {
+                    const mobile = geojson2h3.h3ToFeature(payload.body.id_string, { 'id': payload.body.id_string, 'id_string': payload.body.id_string, 'best_rssi': payload.body.best_rssi, 'snr': payload.body.snr })
+                    mobile.id = payload.body.id_string
+                    setMobileHexGeoJson(prev => mergeHexFeatures(prev.features, [mobile]))
                 }
+                if (layer !== 'permanent') return;
                 var new_feature = geojson2h3.h3ToFeature(payload.body.id_string, { 'id': payload.body.id, 'id_string': payload.body.id_string, 'best_rssi': payload.body.best_rssi, 'snr': payload.body.snr })
                 new_feature.id = payload.body.id
                 features.push(new_feature)
@@ -1144,9 +1148,9 @@ function Map(props) {
         const intent = parseProjectLink(location.pathname);
         // Not a view path (a hex deep-link, say), or already showing it.
         if (!intent || location.pathname === viewPath) { setMirrorArmed(true); return; }
+        setIncludeMobile(intent.includeMobile);
         setShowGateways(intent.showGateways);
         setHideCoverage(intent.hideCoverage);
-        setShowOtherHexes(intent.showOtherHexes);
         if (!intent.project) {
             setActiveProjectCode(null);
             setMirrorArmed(true);
@@ -1191,7 +1195,7 @@ function Map(props) {
     // starts mirroring from that point on.
     const onToggleGateways = useCallback(() => { setShowGateways(v => !v); releaseUrlToView(); }, [releaseUrlToView]);
     const onToggleCoverage = useCallback(() => { setHideCoverage(v => !v); releaseUrlToView(); }, [releaseUrlToView]);
-    const onToggleOtherHexes = useCallback(() => { setShowOtherHexes(v => !v); releaseUrlToView(); }, [releaseUrlToView]);
+    const onToggleIncludeMobile = useCallback(() => { setIncludeMobile(v => !v); releaseUrlToView(); }, [releaseUrlToView]);
 
     const lastMirroredProjectRef = useRef(activeProjectCode);
     React.useEffect(() => {
@@ -1402,7 +1406,7 @@ function Map(props) {
                     <Layer {...timelineRevealLayer} filter={timelineRevealFilter} />
                 </Source>
                 {!timelineMode && !hideCoverage &&
-                    <Source id="uplink-tileserver" type="geojson" data={hexGeoJson} promoteId="id">
+                    <Source id="uplink-tileserver" type="geojson" data={coverageGeoJson} promoteId="id">
                         <Layer {...uplinkTileServerLayer} />
                     </Source>
                 }
@@ -1426,18 +1430,6 @@ function Map(props) {
                 <Source id="uplink-hotspots-circle" type="geojson" data={uplinkHotspotsData.circle}>
                     <Layer {...uplinkHotspotsCircleLayer} />
                 </Source>
-                {/* Inspection-mode purple layer: non-permanent ("other")
-                    gateway hexes. Like the timeline source above, Source +
-                    Layer are ALWAYS mounted (react-map-gl's Layer does a
-                    setState on unmount, which fires a "state update on
-                    unmounted component" warning) and gated by DATA instead:
-                    empty FeatureCollection whenever inspection mode is off.
-                    Declared BEFORE the gateways source so markers paint on
-                    top. Deliberately NOT in interactiveLayerIds — these hexes
-                    answer "where", not "how strong". */}
-                <Source id="uplink-other" type="geojson" data={showOtherHexes ? otherHexGeoJson : emptyFC}>
-                    <Layer {...otherHexLayer} />
-                </Source>
                 {showGateways &&
                     <Source id="gateways" type="geojson" data={gatewayGeoJson}>
                         <Layer {...gatewayMarkerLayer} />
@@ -1460,7 +1452,7 @@ function Map(props) {
                 }
 
             </MapGL>
-            <InfoPane hexId={hexId} bestRssi={bestRssi} snr={snr} uplinks={uplinks} gatewayRecords={gatewayRecords} showHexPane={showHexPane} onCloseHexPaneClick={onCloseHexPaneClick} showHexPaneCloseButton={showHexPaneCloseButton} showGateways={showGateways} onToggleGateways={onToggleGateways} hideCoverage={hideCoverage} onToggleCoverage={onToggleCoverage} showOtherHexes={showOtherHexes} onToggleOtherHexes={onToggleOtherHexes} onFlyToProject={onFlyToProject} onRunProjectTimeline={onRunProjectTimeline} timelineConfig={TIMELINE_PROJECT_CONFIG} />
+            <InfoPane hexId={hexId} bestRssi={bestRssi} snr={snr} uplinks={uplinks} gatewayRecords={gatewayRecords} showHexPane={showHexPane} onCloseHexPaneClick={onCloseHexPaneClick} showHexPaneCloseButton={showHexPaneCloseButton} showGateways={showGateways} onToggleGateways={onToggleGateways} hideCoverage={hideCoverage} onToggleCoverage={onToggleCoverage} includeMobile={includeMobile} onToggleIncludeMobile={onToggleIncludeMobile} onFlyToProject={onFlyToProject} onRunProjectTimeline={onRunProjectTimeline} timelineConfig={TIMELINE_PROJECT_CONFIG} />
             {timelineMode && timeDomain.minT !== null && timeDomain.maxT !== null &&
                 <TimelineControl
                     minT={timeDomain.minT}

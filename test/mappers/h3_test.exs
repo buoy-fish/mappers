@@ -125,7 +125,8 @@ defmodule Mappers.H3Test do
              "gateway_eui" => "ECECECECECECECEC",
              "name" => "Bench GW",
              "location_phase" => "bench_test"
-           }
+           },
+           %{"gateway_eui" => "F00DF00DF00DF00D", "name" => "Vessel GW", "mobile" => true}
          ]}
       )
 
@@ -147,13 +148,24 @@ defmodule Mappers.H3Test do
       assert body.permanent == true
     end
 
-    test "permanent: false when only a non-permanent gateway heard it" do
+    test "permanent: false, mobile: false when only a bench gateway heard it" do
       stub_inventory!()
 
       {:ok, _} = H3.create(message_heard_by("ecececececececec"))
 
       assert_receive %Phoenix.Socket.Broadcast{event: "new_h3", payload: %{body: body}}
       assert body.permanent == false
+      assert body.mobile == false
+    end
+
+    test "mobile: true when only a mobile gateway heard it" do
+      stub_inventory!()
+
+      {:ok, _} = H3.create(message_heard_by("f00df00df00df00d"))
+
+      assert_receive %Phoenix.Socket.Broadcast{event: "new_h3", payload: %{body: body}}
+      assert body.permanent == false
+      assert body.mobile == true
     end
 
     test "permanent: true for a device-GPS-only uplink (device_only placeholder)" do
