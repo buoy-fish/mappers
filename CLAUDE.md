@@ -56,6 +56,7 @@ Coverage hex colors are defined in two places:
 - RSSI gradient: `rgba(255,152,0, 0.15/0.5/0.85)` (orange, -120 to -80 dBm)
 - Outline selected: `rgba(255,152,0, 0.5)`
 - Unselected hex: `#b67ffe` (purple)
+- Mobile coverage ("Include mobile coverage"): no colour of its own — included mobile hexes join the coverage source and take the same RSSI scale, hover and selection
 - Device-to-hotspot lines: `#d8d51d` (yellow)
 
 **`assets/css/app.css`** — Legend CSS:
@@ -68,7 +69,7 @@ Coverage hex colors are defined in two places:
 | Method | Path | Purpose |
 |--------|------|---------|
 | `POST` | `/api/v1/ingest/uplink` | Ingest device uplink (ChirpStack format) |
-| `GET` | `/api/v1/hexes` | Coverage hexes, compact rows. `?scope=permanent` (default) \| `other` \| `all` |
+| `GET` | `/api/v1/hexes` | Coverage hexes, compact rows. `?scope=permanent` (default) \| `mobile` \| `other` \| `all` |
 | `GET` | `/api/v1/coverage/timeline` | Timeline rows; same `scope` param and default |
 | `GET` | `/api/v1/gateways` | Gateway markers (proxied from the app.buoy.fish inventory cache) |
 | `GET` | `/api/v1/uplinks/hex/:h3_index` | Get hotspots that heard a hex |
@@ -84,7 +85,7 @@ Everything the map shows is addressable, so any view can be copied out of the ad
 |-----|---------|
 | `/` | Default view (admin-configured center/zoom) |
 | `/<project-code>` | Framed on that project, e.g. `/gulf-of-nicoya-costa-rica` |
-| `/<project-code>/show-gateways` | …plus display toggles. Flag segments are order-independent, and a nested flag implies its parents (`show-mobile-hexes` ⇒ `hide-coverage` ⇒ `show-gateways`) |
+| `/<project-code>/show-gateways` | …plus display toggles (`include-mobile`, `show-gateways`, `hide-coverage`). Flag segments are order-independent; `hide-coverage` implies `show-gateways`. The retired `show-mobile-hexes` still parses (as `include-mobile` + `show-gateways`) but is never emitted |
 | `/show-gateways` | Flags with no project |
 | `/uplinks/hex/:h3_index` | A single hex, info pane open |
 | `/?play=<project-code>&start=…&end=…&speed=…&loop=…&lat=…&lng=…&zoom=…` | Timeline bloom; built by the scrubber's Copy-link button |
@@ -97,7 +98,7 @@ Server-side, `MappersWeb.DeepLink` is the single home for the flag and reserved-
 
 Run the JS unit tests with `npm test --prefix assets` (node:test, no runner dependency).
 
-**Scope semantics**: the default hex/timeline view serves only hexes with at least one contributor that is a permanently-installed gateway (`location_phase == "permanent"` in the app.buoy.fish feed) or a device-GPS-only uplink (`device_only` placeholder). `other` is the complement (mobile/bench/unknown contributors); `all` is unfiltered. Classification lives in `Mappers.Coverage.Scope`; the gateway feed cache in `Mappers.Gateways.Inventory` (both supervised, both fail open to unscoped serving when the app feed is unavailable). The `h3:new` channel payload carries `permanent: boolean`.
+**Scope semantics** (app.buoy.fish ADR-0035 gateway profiles): the default hex/timeline view serves only hexes with at least one contributor that is a permanently-installed gateway (`location_phase == "permanent"`, or missing, in the app.buoy.fish feed, and not `mobile`) or a device-GPS-only uplink (`device_only` placeholder). `mobile` serves hexes heard by a mobile gateway (feed rows with `mobile: true`, no coordinates) and by no permanent one — added to the coverage source (same styling) when the legend's opt-in **Include mobile coverage** is on. Bench and unknown contributors are in no UI scope. `other` (everything not permanent) and `all` (unfiltered) remain for API callers. Classification lives in `Mappers.Coverage.Scope`; the gateway feed cache in `Mappers.Gateways.Inventory` (both supervised; permanent/other/all fail open to unscoped serving when the app feed is unavailable, `mobile` fails closed to nothing). The `h3:new` channel payload carries `permanent` and `mobile` booleans; `assets/js/utils/coverageClass.js` routes them (unit-tested).
 
 ## Infrastructure
 

@@ -48,9 +48,13 @@ defmodule Mappers.Gateways do
       # Inventory registration time (app.buoy.fish PR #162) — shown as
       # "Installed" in the gateway tooltip.
       installed_at: g["installed_at"],
-      # Deployment classification (permanent | mobile | bench_test); nil on
-      # older API versions and treated as "permanent" everywhere (fail-open).
-      location_phase: g["location_phase"]
+      # Deployment classification (permanent | bench_test); nil on older API
+      # versions and treated as "permanent" everywhere (fail-open) -- unless
+      # the row is mobile.
+      location_phase: g["location_phase"],
+      # Mobile gateways (ADR-0035) come with no coordinates: they place no
+      # marker and their coverage is its own, opt-in scope.
+      mobile: g["mobile"] == true
     }
   end
 

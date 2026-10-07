@@ -216,6 +216,12 @@ body {
                           stroke: #ffffff;
                           stroke-width: 0.5px;
                         }
+/* The one-line caveat under "Include mobile coverage". */
+.legend-note {
+  font-size: 0.75rem;
+  line-height: 1.3;
+  opacity: 0.85;
+}
 
 /*start projects dropdown*/
 .projects-pane {

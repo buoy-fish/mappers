@@ -25,6 +25,12 @@ defmodule MappersWeb.DeepLinkTest do
       assert DeepLink.flag_slugs() == js
     end
 
+    test "legacy flag slugs match (parsed for old links, never emitted)" do
+      js = js_list("LEGACY_FLAG_SLUGS = \\[")
+      assert js != []
+      assert DeepLink.legacy_flag_slugs() == js
+    end
+
     test "reserved segments match" do
       js = js_list("RESERVED = new Set\\(\\[")
       assert js != []

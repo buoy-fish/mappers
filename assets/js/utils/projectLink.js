@@ -9,16 +9,21 @@
 //   /<flag>...                          (flags without a project)
 //
 // Flags are the three legend display toggles, named by slug:
+//   include-mobile     → Include mobile coverage (stands alone)
 //   show-gateways      → Show Gateways
 //   hide-coverage      → Hide Coverage        (implies show-gateways)
-//   show-mobile-hexes  → Show mobile gateway hexes (implies hide-coverage)
+//
+// Legacy: `show-mobile-hexes` (the old inspection-only switch, nested under
+// Hide Coverage) is still parsed — as include-mobile + show-gateways (mobile
+// hexes now draw within coverage, so hide-coverage would hide them) — but
+// never emitted.
 //
 // Segment ORDER doesn't matter: every segment that is a known flag slug sets
 // that flag, and the first segment that isn't becomes the project slug. Unknown
 // extra segments are ignored so a mangled link still lands on a sane view.
 //
-// The nesting implications matter: the legend only offers Hide Coverage once
-// Show Gateways is on, and mobile hexes only once coverage is hidden. Map.js
+// The nesting implication matters: the legend only offers Hide Coverage once
+// Show Gateways is on. Map.js
 // enforces that invariant by force-closing children when a parent turns off, so
 // a link naming a child MUST switch its parents on or the state would collapse
 // the moment it was applied. Both parse and build normalize the same way, which
@@ -28,14 +33,17 @@
 // trivially unit-testable from plain Node — same contract as timelineLink.js.
 
 // Flag slugs in legend order (parents before children). The Elixir side mirrors
-// this list in MappersWeb.OgMeta — keep the two in sync.
-export const VIEW_FLAG_SLUGS = ['show-gateways', 'hide-coverage', 'show-mobile-hexes'];
+// both lists in MappersWeb.DeepLink (test/mappers_web/deep_link_test.exs
+// enforces it).
+export const VIEW_FLAG_SLUGS = ['include-mobile', 'show-gateways', 'hide-coverage'];
+export const LEGACY_FLAG_SLUGS = ['show-mobile-hexes'];
 
-// slug → state key on Map.js.
+// slug → state keys it sets on Map.js.
 const FLAG_KEYS = {
-    'show-gateways': 'showGateways',
-    'hide-coverage': 'hideCoverage',
-    'show-mobile-hexes': 'showOtherHexes',
+    'include-mobile': ['includeMobile'],
+    'show-gateways': ['showGateways'],
+    'hide-coverage': ['hideCoverage'],
+    'show-mobile-hexes': ['includeMobile', 'showGateways'],
 };
 
 // First path segments that belong to something OTHER than a project view:
@@ -64,19 +72,19 @@ function normalizeSlug(raw) {
     return SLUG_RE.test(s) ? s : null;
 }
 
-// Apply the legend's nesting rules: a child flag switches its parents on.
+// Apply the legend's nesting rule: Hide Coverage switches Show Gateways on.
 function withImpliedParents(flags) {
-    const showOtherHexes = !!flags.showOtherHexes;
-    const hideCoverage = !!flags.hideCoverage || showOtherHexes;
+    const includeMobile = !!flags.includeMobile;
+    const hideCoverage = !!flags.hideCoverage;
     const showGateways = !!flags.showGateways || hideCoverage;
-    return { showGateways, hideCoverage, showOtherHexes };
+    return { includeMobile, showGateways, hideCoverage };
 }
 
 /**
  * Parse a pathname into a view intent, or null when the path belongs to another
  * route (hex deep-links, the API, static assets). Never throws.
  *
- * Returns `{ project, showGateways, hideCoverage, showOtherHexes }` where
+ * Returns `{ project, includeMobile, showGateways, hideCoverage }` where
  * `project` is a slug string or null.
  */
 export function parseProjectLink(pathname) {
@@ -91,9 +99,9 @@ export function parseProjectLink(pathname) {
     let project = null;
     let projectSeen = false;
     for (const segment of segments) {
-        const key = FLAG_KEYS[segment.toLowerCase()];
-        if (key) {
-            flags[key] = true;
+        const keys = FLAG_KEYS[segment.toLowerCase()];
+        if (keys) {
+            for (const key of keys) flags[key] = true;
             continue;
         }
         // The FIRST non-flag segment is the project slot, whether or not it
@@ -150,7 +158,7 @@ export function buildProjectPath(state) {
     const parts = [];
     if (slug) parts.push(slug);
     for (const flagSlug of VIEW_FLAG_SLUGS) {
-        if (flags[FLAG_KEYS[flagSlug]]) parts.push(flagSlug);
+        if (flags[FLAG_KEYS[flagSlug][0]]) parts.push(flagSlug);
     }
     return '/' + parts.join('/');
 }

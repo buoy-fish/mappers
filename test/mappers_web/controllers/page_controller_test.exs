@@ -30,6 +30,11 @@ defmodule MappersWeb.PageControllerTest do
     assert html =~ ~s(property="og:title" content="Gulf Of Nicoya coverage · Buoy.Fish")
   end
 
+  test "GET a project deep-link that includes mobile coverage titles as the project", %{conn: conn} do
+    html = conn |> get("/include-mobile/gulf-of-nicoya") |> html_response(200)
+    assert html =~ ~s(property="og:title" content="Gulf Of Nicoya coverage · Buoy.Fish")
+  end
+
   test "GET a flags-only path mounts the shell with the default card", %{conn: conn} do
     html = conn |> get("/show-gateways") |> html_response(200)
     assert html =~ ~s(<div id="react-app">)

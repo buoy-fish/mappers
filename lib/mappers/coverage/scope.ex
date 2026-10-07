@@ -1,10 +1,14 @@
 defmodule Mappers.Coverage.Scope do
   @moduledoc """
-  Classifies coverage by whether it was heard by a PERMANENT gateway.
+  Classifies coverage by the kind of gateway that heard it (ADR-0035 gateway
+  profiles): PERMANENT (the default map), MOBILE (shown only when the visitor
+  includes mobile coverage: it moves, so it can't be relied on), and neither
+  (bench gateways and unknown hotspots -- in no scope the UI offers).
 
   A gateway is permanent when its inventory `location_phase` is `"permanent"`
   or missing (older app.buoy.fish versions don't send the field — fail-open so
-  the map never blanks). Identity matching reuses the `Mappers.Gateways`
+  the map never blanks) and it is not `mobile`. A hex is mobile when a mobile
+  gateway heard it and no permanent one did. Identity matching reuses the `Mappers.Gateways`
   helpers, so the four dimensions here are exactly the ones `attach_last_heard/1`
   uses: stream IDs (`gateway_id`/`relay_gateway_id`), normalized hotspot name,
   and the 8-hex mesh-relay suffix of 16-char stream IDs.
@@ -48,14 +52,34 @@ defmodule Mappers.Coverage.Scope do
   end
 
   @doc """
-  Whether any of an ingesting uplink's hotspots (normalized string-keyed maps,
-  see `Mappers.Ingest`) matches a permanent gateway identity. `:unknown` when
-  no inventory has ever loaded — callers decide the fail-open direction.
+  The set of h3_res9 ids heard by a mobile gateway and by no permanent one:
+  `{:ok, MapSet}` (possibly stale) or `:unavailable`.
   """
-  def classify_hotspots(hotspots, server \\ __MODULE__) do
+  def mobile_hex_ids(server \\ __MODULE__) do
     case snapshot(server) do
-      {:ok, sets} -> Enum.any?(hotspots, &hotspot_matches?(&1, sets))
-      :unavailable -> :unknown
+      {:ok, %{mobile_hex_ids: hex_ids}} -> {:ok, hex_ids}
+      :unavailable -> :unavailable
+    end
+  end
+
+  @doc """
+  The class of an ingesting uplink's hotspots (normalized string-keyed maps,
+  see `Mappers.Ingest`): `:permanent` if any matches a
+  permanent gateway (or is the device-only placeholder), else `:mobile` if
+  any matches a mobile gateway, else `:none`. `:unknown` when no inventory
+  has ever loaded.
+  """
+  def hotspot_class(hotspots, server \\ __MODULE__) do
+    case snapshot(server) do
+      {:ok, sets} ->
+        cond do
+          Enum.any?(hotspots, &hotspot_matches?(&1, sets)) -> :permanent
+          Enum.any?(hotspots, &identity_matches?(&1, sets.mobile)) -> :mobile
+          true -> :none
+        end
+
+      :unavailable ->
+        :unknown
     end
   end
 
@@ -64,17 +88,27 @@ defmodule Mappers.Coverage.Scope do
   to permanent — the default coverage view.
   """
   def parse_scope("other"), do: :other
+  def parse_scope("mobile"), do: :mobile
   def parse_scope("all"), do: :all
   def parse_scope(_), do: :permanent
 
   @doc """
   Filter endpoint rows by scope, `id_fun` extracting each row's h3_res9 id.
-  Fail-open: when the permanent set is unavailable every scope serves all rows
-  (already logged by the snapshot path).
+  Fail-open: when the permanent set is unavailable the permanent and other
+  scopes serve all rows (already logged by the snapshot path). The mobile
+  scope fails CLOSED -- it is an overlay, and serving every hex as mobile
+  would repaint the whole map.
   """
   def filter_rows(rows, scope, id_fun, server \\ __MODULE__)
 
   def filter_rows(rows, :all, _id_fun, _server), do: rows
+
+  def filter_rows(rows, :mobile, id_fun, server) do
+    case mobile_hex_ids(server) do
+      {:ok, ids} -> Enum.filter(rows, &MapSet.member?(ids, id_fun.(&1)))
+      :unavailable -> []
+    end
+  end
 
   def filter_rows(rows, scope, id_fun, server) when scope in [:permanent, :other] do
     case permanent_hex_ids(server) do
@@ -156,20 +190,37 @@ defmodule Mappers.Coverage.Scope do
   defp compute(inventory) do
     case Inventory.get(inventory) do
       {:ok, gateways} ->
-        permanent =
-          Enum.filter(gateways, &(Map.get(&1, :location_phase) in [nil, "permanent"]))
+        {mobile, fixed} = Enum.split_with(gateways, &(Map.get(&1, :mobile) == true))
+        permanent = Enum.filter(fixed, &(Map.get(&1, :location_phase) in [nil, "permanent"]))
 
-        ids = permanent |> Enum.flat_map(&Gateways.identifiers/1) |> MapSet.new()
-        names = permanent |> Enum.flat_map(&Gateways.name_candidates/1) |> MapSet.new()
+        %{ids: ids, names: names, suffixes: suffixes} = identity_sets(permanent)
+        mobile_sets = identity_sets(mobile)
+        # One DISTINCT scan of hotspot names, matched against both sets.
+        heard_names = distinct_hotspot_names()
 
-        suffixes =
-          permanent |> Enum.map(&Gateways.relay_suffix/1) |> Enum.reject(&is_nil/1) |> MapSet.new()
+        hex_ids =
+          query_hex_ids(ids, raw_names(heard_names, names), suffixes, include_device_only: true)
+
+        mobile_hex_ids =
+          if mobile == [] do
+            # No mobile gateways (the feed sends none before ADR-0035's app
+            # side ships): skip the second full join entirely.
+            MapSet.new()
+          else
+            mobile_sets.ids
+            |> query_hex_ids(raw_names(heard_names, mobile_sets.names), mobile_sets.suffixes,
+              include_device_only: false
+            )
+            |> MapSet.difference(hex_ids)
+          end
 
         cache = %{
           ids: ids,
           names: names,
           suffixes: suffixes,
-          hex_ids: query_hex_ids(ids, names, suffixes),
+          mobile: mobile_sets,
+          hex_ids: hex_ids,
+          mobile_hex_ids: mobile_hex_ids,
           computed_at: System.monotonic_time(:millisecond)
         }
 
@@ -180,27 +231,41 @@ defmodule Mappers.Coverage.Scope do
     end
   end
 
-  defp query_hex_ids(ids, names, suffixes) do
+  defp identity_sets(gateways) do
+    %{
+      ids: gateways |> Enum.flat_map(&Gateways.identifiers/1) |> MapSet.new(),
+      names: gateways |> Enum.flat_map(&Gateways.name_candidates/1) |> MapSet.new(),
+      suffixes:
+        gateways |> Enum.map(&Gateways.relay_suffix/1) |> Enum.reject(&is_nil/1) |> MapSet.new()
+    }
+  end
+
+  # Two-phase name match: normalization (separators/case) happens in Elixir
+  # over the DISTINCT hotspot_name values (small cardinality), then the raw
+  # spellings that normalized into a gateway set drive an exact SQL IN.
+  defp distinct_hotspot_names do
+    from(uh in UplinkHeard,
+      where: not is_nil(uh.hotspot_name) and uh.hotspot_name != "",
+      distinct: true,
+      select: uh.hotspot_name
+    )
+    |> Repo.all()
+  end
+
+  defp raw_names(heard_names, names),
+    do: Enum.filter(heard_names, &MapSet.member?(names, Gateways.normalize_name(&1)))
+
+  defp query_hex_ids(ids, raw_names, suffixes, opts) do
     id_list = MapSet.to_list(ids)
     suffix_list = MapSet.to_list(suffixes)
-
-    # Two-phase name match: normalization (separators/case) happens in Elixir
-    # over the DISTINCT hotspot_name values (small cardinality), then the raw
-    # spellings that normalized into the permanent set drive an exact SQL IN.
-    raw_names =
-      from(uh in UplinkHeard,
-        where: not is_nil(uh.hotspot_name) and uh.hotspot_name != "",
-        distinct: true,
-        select: uh.hotspot_name
-      )
-      |> Repo.all()
-      |> Enum.filter(&MapSet.member?(names, Gateways.normalize_name(&1)))
+    # Device-GPS-only coverage is permanent by definition (see moduledoc).
+    device_only = if Keyword.fetch!(opts, :include_device_only), do: ["device_only"], else: []
 
     from(uh in UplinkHeard,
       join: l in Link,
       on: l.uplink_id == uh.uplink_id,
       where:
-        uh.hotspot_address == "device_only" or
+        uh.hotspot_address in ^device_only or
           fragment("lower(?)", uh.gateway_id) in ^id_list or
           fragment("lower(?)", uh.relay_gateway_id) in ^id_list or
           uh.hotspot_name in ^raw_names or
@@ -216,8 +281,9 @@ defmodule Mappers.Coverage.Scope do
   # The device-only placeholder (see moduledoc) has no gateway identity to
   # match; it is permanent by definition.
   defp hotspot_matches?(%{"id" => "device_only"}, _sets), do: true
+  defp hotspot_matches?(hotspot, sets), do: identity_matches?(hotspot, sets)
 
-  defp hotspot_matches?(hotspot, %{ids: ids, names: names, suffixes: suffixes}) do
+  defp identity_matches?(hotspot, %{ids: ids, names: names, suffixes: suffixes}) do
     gateway_id = downcase(hotspot["gateway_id"])
     relay_gateway_id = downcase(hotspot["relay_gateway_id"])
 

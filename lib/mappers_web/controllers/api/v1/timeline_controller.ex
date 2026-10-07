@@ -16,7 +16,7 @@ defmodule MappersWeb.API.V1.TimelineController do
   geom loaded.
 
   `scope` narrows the set by contributing gateway exactly like `/api/v1/hexes`:
-  `permanent` (default, also any unknown value), `other`, `all`.
+  `permanent` (default, also any unknown value), `mobile`, `other`, `all`.
   """
   def index(conn, params) do
     # Exclude first_seen IS NULL: a hex with no known first-seen can't take part
