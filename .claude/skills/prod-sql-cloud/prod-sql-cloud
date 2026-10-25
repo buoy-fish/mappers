@@ -1,0 +1,40 @@
+#!/bin/sh
+# prod-sql-cloud — prod-sql from a cloud Claude session, through sql-api.
+#
+#   prod-sql-cloud <target> < query
+#
+# Source: buoy-fish/skills skills/prod-sql/gateway/prod-sql-cloud/. Copied into each
+# repo's .claude/skills/prod-sql-cloud/; edit the source, not a copy.
+# The cloud environment's network secret adds the Access token on the way
+# out, so this script never holds it. Allowlisted: it takes one target name
+# and makes one fixed request; stdout, stderr and exit status match prod-sql's.
+set -eu
+url=https://sql-api.buoy.fish  # fixed: allowlisted (tests swap in a local copy)
+if [ "$#" -ne 1 ]; then echo "prod-sql-cloud: takes one target; pipe the query on stdin" >&2; exit 2; fi
+case "$1" in [a-z]*) ;; *) echo "prod-sql-cloud: unknown target '$1'" >&2; exit 2 ;; esac
+case "$1" in *[!a-z0-9-]*) echo "prod-sql-cloud: unknown target '$1'" >&2; exit 2 ;; esac
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+code=$(curl -sS -o "$tmp/body" -D "$tmp/head" -w '%{http_code}' --max-time 90 \
+  -H 'content-type: text/plain' --data-binary @- "$url/v1/query/$1") || {
+  echo "prod-sql-cloud: sql-api unreachable" >&2; exit 1
+}
+if ! grep -qi '^x-sql-api:' "$tmp/head"; then
+  case "$code" in
+    401 | 403) echo "prod-sql-cloud: Access refused ($code): is the sql-api network secret on this cloud environment?" >&2 ;;
+    *) echo "prod-sql-cloud: HTTP $code from something other than sql-api (routing?)" >&2 ;;
+  esac
+  exit 1
+fi
+header() { tr -d '\r' < "$tmp/head" | tr '[:upper:]' '[:lower:]' | sed -n "s/^$1: *\\([0-9][0-9]*\\)\$/\\1/p" | tail -n 1; }
+n=$(header x-sql-api-stdout-bytes)
+if [ -n "$n" ]; then
+  # prod-sql's stdout, then its stderr, split where sql-api says.
+  [ "$n" -eq 0 ] || head -c "$n" "$tmp/body"  # macOS head refuses -c 0
+  tail -c "+$((n + 1))" "$tmp/body" >&2
+else
+  cat "$tmp/body" >&2  # sql-api's own refusal (413, 429, 504, …)
+fi
+if [ "$code" = 200 ]; then exit 0; fi
+rc=$(header x-sql-api-rc)
+exit "${rc:-1}"
