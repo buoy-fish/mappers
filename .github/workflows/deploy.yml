@@ -58,6 +58,11 @@ jobs:
           nix develop --command bash -c 'cd assets && NODE_ENV=production node build.mjs --deploy'
           echo "Running phx.digest..."
           MIX_ENV=prod nix develop --command mix phx.digest
+          # Each deploy digests a new app.js/app.css beside every old one, on
+          # the app box's shared disk. Keep 2, so the old node serves its own
+          # until the restart. A failed clean costs disk, never the deploy.
+          MIX_ENV=prod nix develop --command mix phx.digest.clean --keep 2 \
+            || echo "⚠ phx.digest.clean failed; old digests stay on disk"
           echo "✓ Assets built"
 
           # ── Migrate + compile ──
