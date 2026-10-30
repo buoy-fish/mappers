@@ -24,6 +24,7 @@ import { get } from '../data/Rest'
 import { getInitialProjects, fetchProjects } from '../utils/projects'
 import { parseTimelineLink, buildTimelineLink } from '../utils/timelineLink'
 import { parseProjectLink, buildProjectPath, urlMirrorAction } from '../utils/projectLink'
+import { gatewayFeatures, gatewayRecordsIndex, refreshPopupGw, applyHeardToFeatures, applyHeardToPopup, keepNewerHeard } from '../utils/gatewayFeed'
 import { geoToH3, h3ToGeo, h3ToGeoBoundary } from "h3-js";
 import socket from "../socket";
 import geojson2h3 from 'geojson2h3';
@@ -199,6 +200,7 @@ function setHexSelected(map, source, id, selected) {
 const channel = socket.channel("h3:new")
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const GATEWAY_RELOAD_GAP_MS = 60 * 1000;
 
 // Per-project Timeline config, injected at build time from the
 // TIMELINE_PROJECT_CONFIG env var (.env.development locally; the server-side
@@ -674,65 +676,66 @@ function Map(props) {
             .catch(err => console.error('Failed to load hex data:', err));
     }, []);
 
-    // Load gateway positions
-    React.useEffect(() => {
-        fetch('/api/v1/gateways')
-            .then(res => res.json())
-            .then(data => {
-                // Markers show only PERMANENT installations. A missing
-                // location_phase (older app.buoy.fish API) means permanent —
-                // fail-open keeps the map at status quo across the deploy gap.
-                // gatewayRecords below stays UNFILTERED: hex-detail tables must
-                // resolve names for every gateway that ever heard an uplink,
-                // bench/mobile included.
-                const permanentGateways = (data.gateways || []).filter(
-                    gw => (gw.location_phase ?? "permanent") === "permanent"
-                );
-                const features = permanentGateways.map(gw => ({
-                    type: "Feature",
-                    geometry: {
-                        type: "Point",
-                        coordinates: [gw.lng, gw.lat]
-                    },
-                    properties: {
-                        gateway_eui: gw.gateway_eui,
-                        name: gw.hotspot_name || gw.gateway_eui,
-                        last_heard: gw.last_heard ?? null,
-                        installed_at: gw.installed_at ?? null,
-                        role: gw.role ?? null,
-                        description: gw.description ?? null,
-                        altitude: gw.altitude ?? null,
-                        concentrator_ids: gw.concentrator_ids || [],
-                        location_phase: gw.location_phase ?? "permanent"
-                    }
-                }));
-                setGatewayGeoJson({ type: "FeatureCollection", features });
-
-                // Index the inventory record under every identifier the
-                // gateway can be heard by: hardware EUI plus each concentrator
-                // (slot) GWID. The packet forwarder always emits a slot GWID
-                // in rxInfo.gatewayId, never the hardware EUI, so the
-                // concentrator IDs are what actually land in
-                // uplinks_heard.gateway_id at ingest time. Indexing the full
-                // record (not just the name) lets the InfoPane show both the
-                // hardware EUI and the concentrator that heard each hop.
-                const records = {};
-                (data.gateways || []).forEach(gw => {
-                    if (!gw.hotspot_name) return;
-                    const record = {
-                        name: gw.hotspot_name,
-                        gateway_eui: gw.gateway_eui,
-                        concentrator_ids: gw.concentrator_ids || [],
-                    };
-                    if (gw.gateway_eui) records[gw.gateway_eui] = record;
-                    (gw.concentrator_ids || []).forEach(cid => {
-                        if (cid) records[cid] = record;
-                    });
-                });
-                setGatewayRecords(records);
+    // Load gateway positions and last-heard times. Each load cancels the one before,
+    // so an older response can't land on top of a newer one. A failed response keeps
+    // what's on screen: a JSON error body would otherwise parse fine and blank the
+    // markers. So does a degraded one (no inventory, so no roles or real EUIs) once
+    // there's real data to keep. Until there is, keep retrying: gateway_heard carries
+    // inventory EUIs, so a page without the inventory can't update itself.
+    const gatewayRequestRef = useRef(null);
+    const gatewayRequestedAtRef = useRef(0);
+    const gatewayInventoryLoadedRef = useRef(false);
+    const gatewayRetryRef = useRef(null);
+    const loadGateways = useCallback(function load() {
+        const retryWithoutInventory = () => {
+            if (!gatewayInventoryLoadedRef.current) {
+                gatewayRetryRef.current = setTimeout(load, GATEWAY_RELOAD_GAP_MS);
+            }
+        };
+        clearTimeout(gatewayRetryRef.current);
+        gatewayRequestRef.current?.abort();
+        const controller = new AbortController();
+        gatewayRequestRef.current = controller;
+        gatewayRequestedAtRef.current = performance.now();
+        fetch('/api/v1/gateways', { signal: controller.signal })
+            .then(res => {
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                return res.json();
             })
-            .catch(err => console.error('Failed to load gateway data:', err));
+            .then(data => {
+                if (data.degraded && gatewayInventoryLoadedRef.current) return;
+                gatewayInventoryLoadedRef.current = !data.degraded;
+                const features = gatewayFeatures(data);
+                setGatewayGeoJson(prev => ({ type: "FeatureCollection", features: keepNewerHeard(features, prev.features) }));
+                setGatewayRecords(gatewayRecordsIndex(data));
+                setGatewayPopup(p => refreshPopupGw(p, features));
+                retryWithoutInventory();
+            })
+            .catch(err => {
+                if (err.name === 'AbortError') return;
+                console.error('Failed to load gateway data:', err);
+                retryWithoutInventory();
+            });
     }, []);
+
+    // gateway_heard messages keep last_heard current between loads (see the channel
+    // setup below). Load on mount regardless of the layer, since gatewayRecords feeds
+    // the hex pane too, and again on returning to the tab, in case the socket died
+    // quietly. The gap stops tab switching from stacking up requests: each one runs
+    // attach_last_heard/1, which scans uplinks_heard (~1.3s at 490k rows).
+    React.useEffect(() => {
+        loadGateways();
+        const reloadIfDue = () => {
+            const age = performance.now() - gatewayRequestedAtRef.current;
+            if (!document.hidden && age >= GATEWAY_RELOAD_GAP_MS) loadGateways();
+        };
+        document.addEventListener('visibilitychange', reloadIfDue);
+        return () => {
+            document.removeEventListener('visibilitychange', reloadIfDue);
+            clearTimeout(gatewayRetryRef.current);
+            gatewayRequestRef.current?.abort();
+        };
+    }, [loadGateways]);
 
     // Timeline data fetch. Triggered when entering timeline mode. The endpoint
     // returns a COMPACT array ([{h, t, r}, ...]), NOT GeoJSON — we map each row
@@ -817,8 +820,25 @@ function Map(props) {
                 setUplinkChannelData(featureCollection)
             })
 
+            // Every uplink, and not frozen by timeline mode: this is the gateway's
+            // current state, not part of the historical hex view.
+            channel.on("gateway_heard", payload => {
+                setGatewayGeoJson(prev => {
+                    const features = applyHeardToFeatures(prev.features, payload.gateways);
+                    return features === prev.features ? prev : { ...prev, features };
+                });
+                setGatewayPopup(p => applyHeardToPopup(p, payload.gateways));
+            })
+
+            // "ok" fires again on every rejoin. Messages sent while the socket was
+            // down are gone, so a rejoin reloads to catch up.
+            let joinedBefore = false;
             channel.join()
-                .receive("ok", resp => { console.log("Joined successfully", resp) })
+                .receive("ok", resp => {
+                    console.log("Joined successfully", resp)
+                    if (joinedBefore) loadGateways();
+                    joinedBefore = true;
+                })
                 .receive("error", resp => { console.log("Unable to join", resp) })
 
             setInitComplete(true);

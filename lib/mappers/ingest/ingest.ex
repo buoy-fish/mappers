@@ -1,6 +1,7 @@
 defmodule Mappers.Ingest do
   alias Mappers.Uplink
   alias Mappers.Uplinks
+  alias Mappers.Gateways
   alias Mappers.H3
   alias Mappers.H3.Links
   alias Mappers.UplinkHeard
@@ -59,6 +60,9 @@ defmodule Mappers.Ingest do
                     # partial insert failures are logged, not propagated (so a
                     # single bad hotspot never sinks the whole uplink/hex).
                     {:ok, uplinks_heard} = UplinksHeard.create(hotspots, uplink_id)
+                    # Display only, so off the ingest path: a stalled inventory or
+                    # a bad feed row must not hold up or fail the uplink.
+                    Task.start(fn -> Gateways.broadcast_heard(uplinks_heard) end)
 
                     # create h3/uplink link
                     Links.create(h3_res9_id, uplink_id)

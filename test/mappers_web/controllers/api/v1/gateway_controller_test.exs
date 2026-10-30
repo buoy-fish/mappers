@@ -84,7 +84,9 @@ defmodule MappersWeb.API.V1.GatewayControllerTest do
     # No stub response configured -> the Inventory has no snapshot.
     insert_heard!("646cb99320d8e64b", ~U[2026-06-07 09:00:00.000000Z])
 
-    assert %{"gateways" => [gw]} = conn |> get("/api/v1/gateways") |> json_response(200)
+    assert %{"gateways" => [gw], "degraded" => true} =
+             conn |> get("/api/v1/gateways") |> json_response(200)
+
     assert gw["gateway_eui"] == "646cb99320d8e64b"
     assert gw["hotspot_name"] == "test-gw"
     assert gw["last_heard"] == "2026-06-07T09:00:00.000000Z"

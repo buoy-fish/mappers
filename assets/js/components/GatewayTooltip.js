@@ -3,13 +3,14 @@ import formatDistanceToNowStrict from 'date-fns/formatDistanceToNowStrict'
 import parseISO from 'date-fns/parseISO'
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const AGE_TICK_MS = 30 * 1000;
 
 // last_heard arrives as an ISO-8601 string (utc_datetime_usec via Jason) from
 // either API path, or null/undefined for a provisioned-but-silent gateway.
 function lastHeardInfo(lastHeard) {
-    if (!lastHeard) return { label: "No uplinks recorded", fresh: false, exact: null };
+    if (!lastHeard) return { label: "No GPS uplinks recorded", fresh: false, exact: null };
     const date = parseISO(lastHeard);
-    if (isNaN(date.getTime())) return { label: "No uplinks recorded", fresh: false, exact: null };
+    if (isNaN(date.getTime())) return { label: "No GPS uplinks recorded", fresh: false, exact: null };
     return {
         label: formatDistanceToNowStrict(date) + " ago",
         fresh: Date.now() - date.getTime() < DAY_MS,
@@ -25,9 +26,9 @@ function installedLabel(installedAt) {
     return date.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
 }
 
-// Tooltip body for a gateway marker. Pure presentational — Map.js owns the
-// Popup wrapper and the show/hide interaction (hover/click on desktop,
-// long-press on touch). `gw` carries the marker's feature properties:
+// Tooltip body for a gateway marker. Presentational apart from the age timer —
+// Map.js owns the Popup wrapper and the show/hide interaction (hover/click on
+// desktop, long-press on touch). `gw` carries the marker's feature properties:
 // { name, last_heard, installed_at, role, description, altitude } — everything
 // but name may be missing (the degraded uplinks_heard fallback path has no
 // role/altitude/installed_at), so each row renders only when its datum exists.
@@ -37,6 +38,14 @@ function GatewayTooltip(props) {
     const gw = props.gw;
     const heard = lastHeardInfo(gw.last_heard);
     const installed = installedLabel(gw.installed_at);
+
+    // The age keeps moving on its own: between uplinks nothing above this component
+    // changes, and the popup must not stay frozen on "2 minutes ago".
+    const [, setAgeTick] = React.useState(0);
+    React.useEffect(() => {
+        const timer = setInterval(() => setAgeTick(n => n + 1), AGE_TICK_MS);
+        return () => clearInterval(timer);
+    }, []);
 
     return (
         <div className="gateway-card">
@@ -52,7 +61,7 @@ function GatewayTooltip(props) {
             </div>
             <dl className="gateway-card-rows">
                 <div className="gateway-card-row">
-                    <dt className="type-smallcap">Last heard</dt>
+                    <dt className="type-smallcap">Last GPS uplink</dt>
                     <dd className={heard.fresh ? "gateway-card-fresh" : ""} title={heard.exact || undefined}>{heard.label}</dd>
                 </div>
                 {installed &&

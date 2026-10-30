@@ -34,7 +34,8 @@ defmodule MappersWeb.API.V1.GatewayController do
           "[GatewayController] gateway inventory unavailable, falling back to uplinks_heard"
         )
 
-        json(conn, %{gateways: fetch_from_uplinks_heard()})
+        # degraded lets an open map keep the real data it already has.
+        json(conn, %{gateways: fetch_from_uplinks_heard(), degraded: true})
     end
   end
 
