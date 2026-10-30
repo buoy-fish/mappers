@@ -6,7 +6,7 @@
   "scripts": {
     "deploy": "node build.mjs --deploy",
     "watch": "node build.mjs --watch",
-    "test": "node --test \"test/**/*.test.mjs\""
+    "test": "find test -name '*.test.mjs' | grep -q . && node --test $(find test -name '*.test.mjs')"
   },
   "dependencies": {
     "@turf/bbox": "^6.3.0",
