@@ -69,6 +69,15 @@
               MIX_ENV=prod mix local.hex --force --if-missing
               MIX_ENV=prod mix local.rebar --force --if-missing
             ) 2>/dev/null || true
+          '' + pkgs.lib.optionalString pkgs.stdenv.isDarwin ''
+
+            # The h3 NIF's CMake runs any clang-tidy it finds. Darwin's stdenv puts the
+            # unwrapped compiler on PATH, whose clang-tidy can't find stdarg.h.
+            unwrapped_cc=${pkgs.stdenv.cc.cc}/bin
+            export PATH=''${PATH//$unwrapped_cc:/}
+            # Homebrew's mix (OTP 28) writes _build/<env> too, and Mix doesn't rebuild
+            # rebar deps when OTP changes, so OTP 27 crashes reading those .beams.
+            export MIX_BUILD_ROOT=_build/nix
           '';
         };
       });

@@ -27,7 +27,7 @@ npm-debug.log
 yarn-error.log
 
 # The directory for downloaded JavaScript dependencies.
-node_modules/
+node_modules
 
 # Settings/configuration for IntelliJ-based IDEs.
 .idea/
