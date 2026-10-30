@@ -89,7 +89,7 @@ Everything the map shows is addressable, so any view can be copied out of the ad
 | `/uplinks/hex/:h3_index` | A single hex, info pane open |
 | `/?play=<project-code>&start=…&end=…&speed=…&loop=…&lat=…&lng=…&zoom=…` | Timeline bloom; built by the scrubber's Copy-link button |
 
-Both codecs are pure and framework-free: `assets/js/utils/projectLink.js` (path form, flag vocabulary, reserved prefixes) and `assets/js/utils/timelineLink.js` (query form). Only `projectLink` has unit tests so far — `assets/test/projectLink.test.mjs`, which also covers `urlMirrorAction`, the decision of who owns the address bar; `timelineLink` is still verified by hand.
+Both codecs are pure and framework-free: `assets/js/utils/projectLink.js` (path form, flag vocabulary, reserved prefixes) and `assets/js/utils/timelineLink.js` (query form). `projectLink` has unit tests in `assets/test/projectLink.test.mjs`, which also covers `urlMirrorAction`, the decision of who owns the address bar; `timelineLink` is still verified by hand.
 
 `Map.js` treats the URL as the source of truth in both directions — it applies an incoming path and mirrors state back out (project changes push history, toggles replace), which is what makes Back/Forward work between views. A shared `?play=` link owns the address bar on arrival and hands it to the view on the visitor's first explicit action, so a timeline link isn't stripped on load *and* isn't stuck for the rest of the session.
 
@@ -98,6 +98,8 @@ Server-side, `MappersWeb.DeepLink` is the single home for the flag and reserved-
 Run the JS unit tests with `npm test --prefix assets` (node:test, no runner dependency).
 
 **Scope semantics**: the default hex/timeline view serves only hexes with at least one contributor that is a permanently-installed gateway (`location_phase == "permanent"` in the app.buoy.fish feed) or a device-GPS-only uplink (`device_only` placeholder). `other` is the complement (mobile/bench/unknown contributors); `all` is unfiltered. Classification lives in `Mappers.Coverage.Scope`; the gateway feed cache in `Mappers.Gateways.Inventory` (both supervised, both fail open to unscoped serving when the app feed is unavailable). The `h3:new` channel payload carries `permanent: boolean`.
+
+**Gateway last-heard**: `/api/v1/gateways` scans `uplinks_heard` on every request, so the map loads it on page load, on socket rejoin, and on returning to the tab (at most once a minute) rather than polling. Between loads, ingest sends a `gateway_heard` message on the `h3:new` channel for every uplink (`new_h3` fires only for a hex the map has never seen). `Gateways.last_heard_updates/2` credits gateways the same way `attach_last_heard/1` does, and `assets/js/utils/gatewayFeed.js` (tested in `assets/test/gatewayFeed.test.mjs`) applies the result.
 
 ## Infrastructure
 

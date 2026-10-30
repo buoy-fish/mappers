@@ -13,6 +13,7 @@ defmodule Mappers.Gateways do
 
   import Ecto.Query
 
+  alias Mappers.Gateways.Inventory
   alias Mappers.Repo
   alias Mappers.UplinksHeards.UplinkHeard
 
@@ -124,6 +125,51 @@ defmodule Mappers.Gateways do
 
       Map.put(gw, :last_heard, last_heard)
     end)
+  end
+
+  @doc """
+  Tell open maps which gateways just heard an uplink. Goes out for every uplink,
+  unlike `new_h3`, which only fires for a hex the map has never seen. With no
+  inventory there's nothing to credit, and a page that misses a message catches up
+  when it next loads `/api/v1/gateways`.
+  """
+  def broadcast_heard(uplinks_heard) do
+    with {:ok, gateways} <- Inventory.get(),
+         [_ | _] = heard <- last_heard_updates(gateways, uplinks_heard) do
+      MappersWeb.Endpoint.broadcast("h3:new", "gateway_heard", %{gateways: heard})
+    end
+
+    :ok
+  end
+
+  @doc """
+  The inventory gateways that `uplinks_heard` rows credit, as
+  `%{gateway_eui, last_heard}`. The in-memory form of `attach_last_heard/1`: same
+  identity dimensions, for rows just inserted rather than the whole table.
+  """
+  def last_heard_updates(gateways, uplinks_heard) do
+    gateways
+    |> Enum.reject(&(&1.gateway_eui in [nil, ""]))
+    |> Enum.flat_map(fn gw ->
+      uplinks_heard
+      |> Enum.filter(&heard_by?(gw, &1))
+      |> Enum.map(& &1.timestamp)
+      |> Enum.max(DateTime, fn -> nil end)
+      |> case do
+        nil -> []
+        last_heard -> [%{gateway_eui: gw.gateway_eui, last_heard: last_heard}]
+      end
+    end)
+  end
+
+  defp heard_by?(gw, row) do
+    id = String.downcase(row.gateway_id || "")
+    name = normalize_name(row.hotspot_name)
+    suffix = relay_suffix(gw)
+
+    id in identifiers(gw) or
+      (name not in [nil, ""] and name in name_candidates(gw)) or
+      (suffix != nil and String.length(id) == 16 and String.slice(id, -8, 8) == suffix)
   end
 
   # identifiers/1, name_candidates/1, relay_suffix/1 and normalize_name/1 are

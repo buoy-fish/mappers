@@ -55,6 +55,82 @@ defmodule Mappers.GatewaysTest do
     )
   end
 
+  describe "last_heard_updates/2" do
+    defp heard_row(gateway_id, hotspot_name, timestamp) do
+      %UplinkHeard{gateway_id: gateway_id, hotspot_name: hotspot_name, timestamp: timestamp}
+    end
+
+    test "credits the same gateway attach_last_heard/1 does, across every identity dimension" do
+      ts = ~U[2026-06-09 18:30:00.000000Z]
+
+      gateways = [
+        inventory_gateway(%{gateway_eui: "EUI0000000000001", concentrator_ids: ["SLOTGWID00000001"], hotspot_name: "by-slot"}),
+        inventory_gateway(%{gateway_eui: "EUI0000000000002", hotspot_name: "by-eui"}),
+        inventory_gateway(%{gateway_eui: "EUI0000000000003", helium_pubkey: "11PubKeyBase58", hotspot_name: "by-pubkey"}),
+        inventory_gateway(%{gateway_eui: "EUI0000000000004", hotspot_name: "Harbor Master"}),
+        inventory_gateway(%{gateway_eui: "EUI0000000000005", helium_animal_name: "Round Teal Otter", hotspot_name: "by-animal"}),
+        inventory_gateway(%{gateway_eui: "EUI0000000000006", mesh_relay_id: "A1B2C3D4", hotspot_name: "by-mesh"}),
+        inventory_gateway(%{gateway_eui: "EUI0000000000007", hotspot_name: "never-heard"})
+      ]
+
+      rows = [
+        {"slotgwid00000001", "unknown"},
+        {"eui0000000000002", "unknown"},
+        {"11PubKeyBase58", "unknown"},
+        {"unlisted-stream-1", "harbor_master"},
+        {"unlisted-stream-2", "round-teal-otter"},
+        {"ffffffffa1b2c3d4", "unknown"}
+      ]
+
+      for {gateway_id, name} <- rows, do: insert_heard!(gateway_id, ts, name)
+
+      from_api =
+        gateways
+        |> Gateways.attach_last_heard()
+        |> Enum.filter(& &1.last_heard)
+        |> Enum.map(&%{gateway_eui: &1.gateway_eui, last_heard: &1.last_heard})
+
+      from_push =
+        Gateways.last_heard_updates(
+          gateways,
+          Enum.map(rows, fn {gateway_id, name} -> heard_row(gateway_id, name, ts) end)
+        )
+
+      assert from_push == from_api
+      assert length(from_push) == 6
+    end
+
+    test "a gateway heard twice in one uplink reports its newest time" do
+      gateways = [inventory_gateway(%{concentrator_ids: ["SLOT0", "SLOT1"]})]
+
+      assert [%{last_heard: ~U[2026-06-09 18:30:01.000000Z]}] =
+               Gateways.last_heard_updates(gateways, [
+                 heard_row("SLOT0", "unknown", ~U[2026-06-09 18:30:00.000000Z]),
+                 heard_row("SLOT1", "unknown", ~U[2026-06-09 18:30:01.000000Z])
+               ])
+    end
+
+    test "a row with no usable identity credits nobody" do
+      gateways = [inventory_gateway(%{hotspot_name: ""})]
+      ts = ~U[2026-06-09 18:30:00.000000Z]
+
+      assert Gateways.last_heard_updates(gateways, [heard_row(nil, "", ts), heard_row(nil, nil, ts)]) == []
+    end
+
+    test "a mesh suffix only matches a 16-character stream ID" do
+      gateways = [inventory_gateway(%{mesh_relay_id: "A1B2C3D4"})]
+      ts = ~U[2026-06-09 18:30:00.000000Z]
+
+      assert Gateways.last_heard_updates(gateways, [heard_row("pubkey-ending-a1b2c3d4", "unknown", ts)]) == []
+    end
+
+    test "an inventory gateway with no EUI is left out, since the map keys updates by EUI" do
+      gateways = [inventory_gateway(%{gateway_eui: nil, concentrator_ids: ["SLOT0"]})]
+
+      assert Gateways.last_heard_updates(gateways, [heard_row("SLOT0", "unknown", ~U[2026-06-09 18:30:00.000000Z])]) == []
+    end
+  end
+
   test "attach_last_heard/1 takes the max timestamp across EUI and concentrator IDs" do
     insert_heard!("AC1F09FFFE000001", ~U[2026-06-01 10:00:00.000000Z])
     insert_heard!("SLOT0GWID0000001", ~U[2026-06-09 18:30:00.000000Z])
