@@ -4,7 +4,7 @@ import { useRef, useCallback, useState } from 'react';
 // ============================================================================
 // TimelineControl — scrub-and-play widget for the coverage Timeline feature.
 // ----------------------------------------------------------------------------
-// Vocabulary (see CONTEXT.md):
+// Vocabulary (see GLOSSARY.md):
 //   - Cumulative coverage as-of T: all hexes with first_seen <= T.
 //   - Baseline: hexes with first_seen < rangeStart (dimmed beneath the bloom).
 //   - Bloom:    in-range hexes (rangeStart <= first_seen <= cursor) revealing
