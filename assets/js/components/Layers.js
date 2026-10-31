@@ -150,7 +150,7 @@ export const gatewayLabelLayer = {
 // both keyed on the same orange `best_rssi` gradient. Their MapLibre filters
 // are set dynamically from the control's `rangeStart`/`cursor` state via the
 // <Layer filter={...}/> prop in Map.js (the static definitions below carry no
-// filter — Map.js supplies it). Vocabulary (see CONTEXT.md):
+// filter — Map.js supplies it). Vocabulary (see GLOSSARY.md):
 //   - Baseline: hexes with first_seen < rangeStart, dimmed beneath the bloom.
 //   - Bloom:    in-range hexes (rangeStart <= first_seen <= cursor) revealing
 //               as the cursor/playhead advances.
