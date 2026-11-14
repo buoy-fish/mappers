@@ -89,7 +89,9 @@ Everything the map shows is addressable, so any view can be copied out of the ad
 | `/uplinks/hex/:h3_index` | A single hex, info pane open |
 | `/?play=<project-code>&start=…&end=…&speed=…&loop=…&lat=…&lng=…&zoom=…` | Timeline bloom; built by the scrubber's Copy-link button |
 
-Both codecs are pure and framework-free: `assets/js/utils/projectLink.js` (path form, flag vocabulary, reserved prefixes) and `assets/js/utils/timelineLink.js` (query form). `projectLink` has unit tests in `assets/test/projectLink.test.mjs`, which also covers `urlMirrorAction`, the decision of who owns the address bar; `timelineLink` is still verified by hand.
+Both codecs are pure and framework-free: `assets/js/utils/projectLink.js` (path form, flag vocabulary, reserved prefixes) and `assets/js/utils/timelineLink.js` (query form). `projectLink` has unit tests in `assets/test/projectLink.test.mjs`, which also covers `urlMirrorAction`, the decision of who owns the address bar; `timelineLink` is covered by `assets/test/timelineLink.test.mjs`.
+
+**Timeline defaults**: "Show baseline" is on in every launch path (InfoPane ▶ and `?play=` links); only an explicit `baseline=0` turns it off. At the end of the range the baseline paints at the bloom's full opacity, so the final frame matches the total coverage map. A project's start comes from `TIMELINE_PROJECT_CONFIG` (baked in at build time; prod's value lives in the server `.env`, pushed with `scripts/push-timeline-config.sh`). With no configured start, the timeline begins at the earliest first-seen hex inside the project's framed view (`assets/js/utils/timelineStart.js`, tested in `assets/test/timelineStart.test.mjs`), falling back to today minus 60 days only when that view has no hexes.
 
 `Map.js` treats the URL as the source of truth in both directions — it applies an incoming path and mirrors state back out (project changes push history, toggles replace), which is what makes Back/Forward work between views. A shared `?play=` link owns the address bar on arrival and hands it to the view on the visitor's first explicit action, so a timeline link isn't stripped on load *and* isn't stuck for the rest of the session.
 

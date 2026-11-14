@@ -194,9 +194,11 @@ export const timelineRevealLayer = {
 };
 
 // Baseline layer — pre-range footprint (first_seen < rangeStart), dimmed to
-// ~30% of the bloom's opacity (0.9 * 0.3 ≈ 0.27). Rendered BENEATH the bloom
-// and only mounted when `showBaseline` is true. Filter set in Map.js:
-// ["<", first_seen, rangeStart].
+// ~30% of the bloom's opacity (0.9 * 0.3 ≈ 0.27) while the bloom plays.
+// Rendered BENEATH the bloom; always mounted, and hidden by a match-nothing
+// filter when `showBaseline` is off (on by default). Filter set in Map.js:
+// ["<", first_seen, rangeStart]. At the end of the range Map.js swaps in
+// timelineBaselineFullPaint so the final frame matches the total map.
 export const timelineBaselineLayer = {
     id: 'timelineBaselineLayer',
     type: 'fill',
@@ -205,6 +207,15 @@ export const timelineBaselineLayer = {
         'fill-opacity': 0.27,
         'fill-outline-color': 'rgba(255,255,255,0.3)'
     }
+};
+
+// Baseline paint for the end-of-range frame: same opacity and outline as the
+// bloom (and the total map's public.h3_res9 layer), so with the baseline on the
+// last frame is indistinguishable from the total coverage map.
+export const timelineBaselineFullPaint = {
+    ...timelineBaselineLayer.paint,
+    'fill-opacity': timelineRevealLayer.paint['fill-opacity'],
+    'fill-outline-color': timelineRevealLayer.paint['fill-outline-color']
 };
 
 export const uplinkChannelLayer = {
