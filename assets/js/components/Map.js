@@ -19,10 +19,11 @@ import GatewayTooltip from "../components/GatewayTooltip"
 import ThemeControl from "../components/ThemeControl"
 import WelcomeModal from "../components/WelcomeModal"
 import TimelineControl, { startOfLocalDay, endOfLocalDay } from "../components/TimelineControl"
-import { uplinkTileServerLayer, uplinkHotspotsLineLayer, uplinkRelayLineLayer, uplinkHotspotsCircleLayer, uplinkHotspotsHexLayer, uplinkChannelLayer, gatewayMarkerLayer, gatewayLabelLayer, selectedHexLayer, timelineRevealLayer, timelineBaselineLayer, otherHexLayer } from './Layers.js';
+import { uplinkTileServerLayer, uplinkHotspotsLineLayer, uplinkRelayLineLayer, uplinkHotspotsCircleLayer, uplinkHotspotsHexLayer, uplinkChannelLayer, gatewayMarkerLayer, gatewayLabelLayer, selectedHexLayer, timelineRevealLayer, timelineBaselineLayer, timelineBaselineFullPaint, otherHexLayer } from './Layers.js';
 import { get } from '../data/Rest'
 import { getInitialProjects, fetchProjects } from '../utils/projects'
 import { parseTimelineLink, buildTimelineLink } from '../utils/timelineLink'
+import { resolveAutoStart } from '../utils/timelineStart'
 import { parseProjectLink, buildProjectPath, urlMirrorAction } from '../utils/projectLink'
 import { gatewayFeatures, gatewayRecordsIndex, refreshPopupGw, applyHeardToFeatures, applyHeardToPopup, keepNewerHeard } from '../utils/gatewayFeed'
 import { geoToH3, h3ToGeo, h3ToGeoBoundary } from "h3-js";
@@ -208,8 +209,10 @@ const GATEWAY_RELOAD_GAP_MS = 60 * 1000;
 //   { "<code>": { "start": "YYYY-MM-DD", "speed": 1|2|4 }, ... }
 // `start` = the bloom start date; `speed` = the default sweep speed for that
 // project (user can still change it in the expanded scrubber). Missing/invalid
-// → empty config; such projects fall back to today − FALLBACK_LOOKBACK_DAYS and
-// speed 1. This is the interim home before app.buoy.fish serves it (behind auth).
+// → empty config; such projects start at the earliest first-seen hex inside the
+// project's framed view (utils/timelineStart.js), or today −
+// FALLBACK_LOOKBACK_DAYS when that view holds no timeline hexes, and speed 1.
+// This is the interim home before app.buoy.fish serves it (behind auth).
 const TIMELINE_PROJECT_CONFIG = (() => {
   try { return JSON.parse(process.env.TIMELINE_PROJECT_CONFIG || "{}"); }
   catch (e) { console.warn("Invalid TIMELINE_PROJECT_CONFIG JSON:", e); return {}; }
@@ -420,7 +423,9 @@ function Map(props) {
     const [cursor, setCursor] = useState(0);
     const [playing, setPlaying] = useState(false);
     const [speed, setSpeed] = useState(1);
-    const [showBaseline, setShowBaseline] = useState(false);
+    // Baseline on by default so the timeline's final frame matches the total
+    // coverage map; `baseline=0` on a deep-link (or the toggle) turns it off.
+    const [showBaseline, setShowBaseline] = useState(true);
     // Continuous loop: when on, the bloom restarts from rangeStart on reaching
     // the end instead of the default one-shot stop. Drives shareable "always
     // playing" deep-links.
@@ -550,8 +555,26 @@ function Map(props) {
     React.useEffect(() => {
         if (!pendingPlay) return;
         if (!(timelineGeoJson.features && timelineGeoJson.features.length)) return;
-        const { start, end } = pendingPlay;
+        const { end, view } = pendingPlay;
         const timer = setTimeout(() => {
+            // start === null: no configured or linked start — begin at the
+            // earliest first-seen hex inside the launched project's view.
+            // Resolved here, not at launch, because it needs the loaded data.
+            let start = pendingPlay.start;
+            if (start == null) {
+                const canvas = mapRef.current?.getMap()?.getCanvas();
+                start = resolveAutoStart({
+                    features: timelineGeoJson.features,
+                    view,
+                    width: canvas?.clientWidth || window.innerWidth,
+                    height: canvas?.clientHeight || window.innerHeight,
+                    end,
+                    now: Date.now(),
+                    lookbackMs: FALLBACK_LOOKBACK_DAYS * DAY_MS,
+                    centerOf: h3ToGeo,
+                    startOfDay: startOfLocalDay,
+                });
+            }
             cursorRef.current = start;
             setRangeStart(start);
             setRangeEnd(end);
@@ -588,6 +611,11 @@ function Map(props) {
             ? ['<', ['get', 'first_seen'], rangeStart]
             : ['==', ['get', 'first_seen'], -1]
     ), [showBaseline, rangeStart]);
+    // At the end of the range the cursor shows all coverage to date, so the
+    // baseline drops its dimming and paints like the bloom (and like the total
+    // map's hex layer): the final frame then matches the total coverage map.
+    const atRangeEnd = rangeEnd > 0 && cursor >= rangeEnd;
+    const timelineBaselinePaint = atRangeEnd ? timelineBaselineFullPaint : timelineBaselineLayer.paint;
     // Dark/light satellite toggle. Default true (dark) so first-time visitors
     // see the visually punchy treatment that lets coverage hexes pop. Persisted
     // per-browser via localStorage so users keep their preference across visits.
@@ -1244,25 +1272,27 @@ function Map(props) {
         // stays the timeline's own Copy-link button.
         setActiveProjectCode(projectCode || null);
         setSpeed(speed || 1);
-        setShowBaseline(!!baseline);
+        // Baseline defaults ON; only an explicit false (baseline=0) hides it.
+        setShowBaseline(baseline !== false);
         setLoop(!!loop);
         setTimelineExpanded(!!open);
-        setPendingPlay({ start, end });
+        // start may be null (no configured/linked start): the auto-play effect
+        // resolves it from the loaded data and this framed view.
+        setPendingPlay({ start, end, view: { lat, lng, zoom } });
     }, []);
 
     // Run the (global) Timeline framed on a project's region (InfoPane ▶ button).
     // No data scoping — the timeline stays global; we only frame the view. Uses
     // the per-project config for start/speed, the project's coords/zoom for
-    // framing, and the non-deep-link defaults (baseline/loop off, minimized).
+    // framing, and the non-deep-link defaults (baseline on, loop off, minimized).
+    // No configured start → null, resolved to the earliest hex in view.
     const onRunProjectTimeline = useCallback((project) => {
         const cfg = TIMELINE_PROJECT_CONFIG[project.code] || {};
-        const start = cfg.start
-            ? startOfLocalDay(parseLocalDate(cfg.start))
-            : startOfLocalDay(Date.now() - FALLBACK_LOOKBACK_DAYS * DAY_MS);
+        const start = cfg.start ? startOfLocalDay(parseLocalDate(cfg.start)) : null;
         const end = endOfLocalDay(Date.now());
         launchTimeline({
             projectCode: project.code, lat: project.lat, lng: project.lng, zoom: project.zoom || 12,
-            start, end, speed: cfg.speed || 1, baseline: false, loop: false, open: false,
+            start, end, speed: cfg.speed || 1, baseline: true, loop: false, open: false,
         });
         // Released HERE rather than in launchTimeline, which the arriving
         // ?play= deep-link also calls — releasing there would rewrite the
@@ -1282,13 +1312,13 @@ function Map(props) {
         const launchFrom = (project) => {
             if (!project) { console.warn('timeline deep-link: unknown project', intent.play); return; }
             const cfg = TIMELINE_PROJECT_CONFIG[project.code] || {};
-            const cfgStart = cfg.start
-                ? startOfLocalDay(parseLocalDate(cfg.start))
-                : startOfLocalDay(Date.now() - FALLBACK_LOOKBACK_DAYS * DAY_MS);
+            // null = no configured start: resolved to the earliest hex in view
+            // once the data loads (see the auto-play effect).
+            const cfgStart = cfg.start ? startOfLocalDay(parseLocalDate(cfg.start)) : null;
             const cfgEnd = endOfLocalDay(Date.now());
             let start = intent.start != null ? startOfLocalDay(intent.start) : cfgStart;
             let end = intent.end != null ? endOfLocalDay(intent.end) : cfgEnd;
-            if (end <= start) {
+            if (start != null && end <= start) {
                 console.warn('timeline deep-link: end<=start, falling back to config window');
                 start = cfgStart; end = cfgEnd;
             }
@@ -1418,7 +1448,7 @@ function Map(props) {
                     rather than unmounting. */}
                 <Source id="timeline" type="geojson" data={timelineMode ? timelineGeoJson : emptyFC}>
                     {/* Baseline declared FIRST so the bloom paints on top. */}
-                    <Layer {...timelineBaselineLayer} filter={timelineBaselineFilter} />
+                    <Layer {...timelineBaselineLayer} paint={timelineBaselinePaint} filter={timelineBaselineFilter} />
                     <Layer {...timelineRevealLayer} filter={timelineRevealFilter} />
                 </Source>
                 {!timelineMode && !hideCoverage &&
