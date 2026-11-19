@@ -60,30 +60,18 @@ export function normalizeProject(raw) {
     // Timeline defaults, edited per project in app.buoy.fish (null = unset).
     const timeline_start = typeof raw.timeline_start === "string" && YMD.test(raw.timeline_start) ? raw.timeline_start : null
     const timeline_speed = TIMELINE_SPEEDS.includes(raw.timeline_speed) ? raw.timeline_speed : null
-    // Whether the server sent the timeline fields at all (an older app, or
-    // FALLBACK_PROJECTS, doesn't). Kept explicitly so a cached, re-normalized
-    // entry, which always has the keys, still knows.
-    const timeline_from_app = typeof raw.timeline_from_app === "boolean"
-        ? raw.timeline_from_app
-        : ("timeline_start" in raw || "timeline_speed" in raw)
-    return { code, name, lat, lng, zoom, timeline_start, timeline_speed, timeline_from_app }
+    return { code, name, lat, lng, zoom, timeline_start, timeline_speed }
 }
 
 /**
- * A project's timeline defaults. When app.buoy.fish serves the fields it is
- * the source of truth, nulls included (an admin clearing the start means
- * "first coverage in view"). Otherwise the legacy TIMELINE_PROJECT_CONFIG
- * env entry, then the built-ins. `start` is 'YYYY-MM-DD' or null (null =
- * first coverage in view); `speed` is 1, 2 or 4.
+ * A project's timeline defaults, as edited in app.buoy.fish. `start` is
+ * 'YYYY-MM-DD' or null (null = first coverage in view); `speed` is 1, 2 or 4
+ * (null in the app = 1).
  */
-export function timelineDefaults(project, envConfig) {
-    if (project && project.timeline_from_app) {
-        return { start: project.timeline_start || null, speed: project.timeline_speed || 1 }
-    }
-    const env = (project && project.code && envConfig && envConfig[project.code]) || {}
+export function timelineDefaults(project) {
     return {
-        start: typeof env.start === "string" && YMD.test(env.start) ? env.start : null,
-        speed: TIMELINE_SPEEDS.includes(env.speed) ? env.speed : 1,
+        start: (project && project.timeline_start) || null,
+        speed: (project && project.timeline_speed) || 1,
     }
 }
 

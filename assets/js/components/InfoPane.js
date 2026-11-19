@@ -286,7 +286,7 @@ function InfoPane(props) {
             { showProjectsPane &&
                 <div className="projects-pane">
                     {projects.map(project => {
-                        const { start } = timelineDefaults(project, props.timelineConfig)
+                        const { start } = timelineDefaults(project)
                         return (
                             <ProjectRow
                                 key={project.code || project.name}
