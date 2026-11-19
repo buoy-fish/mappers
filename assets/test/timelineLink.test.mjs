@@ -11,6 +11,12 @@ test('baseline defaults on when the link omits it', () => {
     assert.equal(parseTimelineLink('?play=gulf-of-nicoya').baseline, true)
 })
 
+test('an empty or unrecognised baseline value keeps the default', () => {
+    assert.equal(parseTimelineLink('?play=gulf-of-nicoya&baseline=').baseline, true)
+    assert.equal(parseTimelineLink('?play=gulf-of-nicoya&baseline=yes').baseline, true)
+    assert.equal(parseTimelineLink('?play=gulf-of-nicoya&baseline=false').baseline, false)
+})
+
 test('baseline=0 still hides it (blank-start animation)', () => {
     assert.equal(parseTimelineLink('?play=gulf-of-nicoya&baseline=0').baseline, false)
     assert.equal(parseTimelineLink('?play=gulf-of-nicoya&baseline=1').baseline, true)

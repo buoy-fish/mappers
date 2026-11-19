@@ -167,21 +167,8 @@ const TIMELINE_RSSI_GRADIENT = [
     'rgba(255,152,0,0.85)'
 ];
 
-// Kept for reference / any non-animated callers. The Map.js render path uses
-// timelineRevealLayer below, not this one.
-export const timelineLayer = {
-    id: 'timelineLayer',
-    type: 'fill',
-    paint: {
-        'fill-color': TIMELINE_RSSI_GRADIENT,
-        'fill-opacity': 0.9,
-        'fill-outline-color': '#ffffff'
-    }
-};
-
-// The timeline's coverage layer: baseline + bloom, full opacity. Its filter is
-// set from state in Map.js (cumulative as-of the cursor, or bloom-only when
-// the baseline is toggled off).
+// The timeline's coverage layer: baseline + bloom, full opacity. Map.js sets
+// its filter from timelineRevealFilter below.
 export const timelineRevealLayer = {
     id: 'timelineRevealLayer',
     type: 'fill',
@@ -191,6 +178,19 @@ export const timelineRevealLayer = {
         'fill-outline-color': '#ffffff'
     }
 };
+
+// MapLibre filter for timelineRevealLayer.
+// Baseline on: every pre-range hex, plus the bloom up to the cursor. At
+//   cursor = today that is the live map's hex set. The explicit
+//   `first_seen < rangeStart` arm keeps the baseline whole when the cursor
+//   sits behind the start handle (start dragged past a paused playhead).
+// Baseline off: only the bloom (rangeStart <= first_seen <= cursor).
+export function timelineRevealFilter({ rangeStart, cursor, showBaseline }) {
+    const fs = ['get', 'first_seen'];
+    return showBaseline
+        ? ['any', ['<', fs, rangeStart], ['<=', fs, cursor]]
+        : ['all', ['>=', fs, rangeStart], ['<=', fs, cursor]];
+}
 
 export const uplinkChannelLayer = {
     id: 'uplinkChannelLayer',

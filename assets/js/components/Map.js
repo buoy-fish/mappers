@@ -19,7 +19,7 @@ import GatewayTooltip from "../components/GatewayTooltip"
 import ThemeControl from "../components/ThemeControl"
 import WelcomeModal from "../components/WelcomeModal"
 import TimelineControl, { startOfLocalDay, endOfLocalDay } from "../components/TimelineControl"
-import { uplinkTileServerLayer, uplinkHotspotsLineLayer, uplinkRelayLineLayer, uplinkHotspotsCircleLayer, uplinkHotspotsHexLayer, uplinkChannelLayer, gatewayMarkerLayer, gatewayLabelLayer, selectedHexLayer, timelineRevealLayer, otherHexLayer } from './Layers.js';
+import { uplinkTileServerLayer, uplinkHotspotsLineLayer, uplinkRelayLineLayer, uplinkHotspotsCircleLayer, uplinkHotspotsHexLayer, uplinkChannelLayer, gatewayMarkerLayer, gatewayLabelLayer, selectedHexLayer, timelineRevealLayer, timelineRevealFilter as buildTimelineRevealFilter, otherHexLayer } from './Layers.js';
 import { get } from '../data/Rest'
 import { getInitialProjects, fetchProjects } from '../utils/projects'
 import { parseTimelineLink, buildTimelineLink } from '../utils/timelineLink'
@@ -574,18 +574,12 @@ function Map(props) {
     const onSetSpeed = useCallback(s => setSpeed(s), []);
     const onToggleBaseline = useCallback(() => setShowBaseline(b => !b), []);
 
-    // Declarative MapLibre filter for the timeline layer, driven by state.
-    // Baseline on: cumulative coverage as-of the cursor (first_seen <= cursor),
-    //   drawn in the live map's style, so cursor = today renders the same
-    //   hexes as the live map.
-    // Baseline off: only the bloom (rangeStart <= first_seen <= cursor).
-    const timelineRevealFilter = React.useMemo(() => (
-        showBaseline
-            ? ['<=', ['get', 'first_seen'], cursor]
-            : ['all',
-                ['>=', ['get', 'first_seen'], rangeStart],
-                ['<=', ['get', 'first_seen'], cursor]]
-    ), [showBaseline, rangeStart, cursor]);
+    // Declarative MapLibre filter for the timeline layer, driven by state
+    // (semantics in Layers.js#timelineRevealFilter).
+    const timelineRevealFilter = React.useMemo(
+        () => buildTimelineRevealFilter({ rangeStart, cursor, showBaseline }),
+        [showBaseline, rangeStart, cursor]
+    );
     // Dark/light satellite toggle. Default true (dark) so first-time visitors
     // see the visually punchy treatment that lets coverage hexes pop. Persisted
     // per-browser via localStorage so users keep their preference across visits.
@@ -1234,7 +1228,9 @@ function Map(props) {
     const launchTimeline = useCallback(({ projectCode, lat, lng, zoom, start, end, speed, baseline, loop, open }) => {
         setViewState(prev => ({ ...prev, latitude: lat, longitude: lng, zoom }));
         setTimelineMode(true);
-        // Start BLANK so the bloom begins on an empty map (no full→blank flash).
+        // Reset to an empty window so nothing draws until pendingPlay sets the
+        // real one (no flash of the previous window). With the baseline on,
+        // pre-range coverage then appears at once and the bloom grows on it.
         setRangeStart(0); setRangeEnd(0); setCursor(0); setPlaying(false);
         setActiveTimelineProjectCode(projectCode);
         // A timeline launch also frames a project, so the path reflects it

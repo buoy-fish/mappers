@@ -53,10 +53,13 @@ export function parseLocalYMD(iso) {
     return t;
 }
 
+// '1'/'true' -> true, '0'/'false' -> false; absent, empty or anything else
+// -> dflt (so a hand-edited `baseline=` keeps baseline's default-on).
 function boolParam(v, dflt = false) {
-    if (v == null) return dflt;
-    const s = String(v).toLowerCase();
-    return s === '1' || s === 'true';
+    const s = String(v ?? '').toLowerCase();
+    if (s === '1' || s === 'true') return true;
+    if (s === '0' || s === 'false') return false;
+    return dflt;
 }
 
 // Build the absolute shareable URL from the current Timeline state. `origin`
