@@ -1,4 +1,10 @@
 #!/bin/bash
+# DEPRECATED (2026-11): per-project timeline start/speed are now edited in
+# app.buoy.fish (Projects → a project → Default map view, or the ⚙ on the
+# map's timeline) and served on /api/v1/public/projects. Once the app serves
+# those fields the map ignores TIMELINE_PROJECT_CONFIG, so edits pushed by
+# this script have no effect. Kept only for an older app server.
+#
 # BUOY-FISH Coverage Mapper — Push Timeline config to prod
 #
 # Idempotently upserts ONLY the `TIMELINE_PROJECT_CONFIG` line from the local

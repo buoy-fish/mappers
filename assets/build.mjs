@@ -79,7 +79,7 @@ const buildOptions = {
     // machine API base above: a human link must never ride a machine hostname
     // (platform ADR-0010).
     "process.env.APP_UI_BASE_URL": JSON.stringify(
-      process.env.APP_UI_BASE_URL ?? "https://app.buoy.fish"
+      process.env.APP_UI_BASE_URL ?? process.env.BUOY_API_BASE_URL ?? "https://app.buoy.fish"
     ),
     "process.env.BUOY_API_BASE_URL": JSON.stringify(
       process.env.BUOY_API_BASE_URL ?? "https://app.buoy.fish"

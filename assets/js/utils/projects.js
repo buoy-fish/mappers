@@ -108,6 +108,8 @@ function readCache() {
 
 function writeCache(projects) {
     try {
+        // The v1 entry predates the timeline fields; drop it.
+        localStorage.removeItem("projects_v1")
         localStorage.setItem(
             CACHE_KEY,
             JSON.stringify({ projects, fetchedAt: Date.now() })
@@ -138,9 +140,21 @@ export function getInitialProjects() {
  * to update React state on a non-null result so the current session
  * shows the freshest data.
  */
+// One request per page load, shared by every caller (InfoPane, Map.js's
+// timeline settings); a failed one is forgotten so a later call retries.
+let inflight = null
+
 export function fetchProjects() {
     if (!API_BASE_URL) return Promise.resolve(null)
+    if (inflight) return inflight
+    inflight = fetchProjectsOnce().then((list) => {
+        if (!list) inflight = null
+        return list
+    })
+    return inflight
+}
 
+function fetchProjectsOnce() {
     const url = `${API_BASE_URL}/api/v1/public/projects`
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
