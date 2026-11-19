@@ -147,10 +147,12 @@ let inflight = null
 export function fetchProjects() {
     if (!API_BASE_URL) return Promise.resolve(null)
     if (inflight) return inflight
-    inflight = fetchProjectsOnce().then((list) => {
-        if (!list) inflight = null
-        return list
-    })
+    inflight = fetchProjectsOnce()
+        .catch(() => null)
+        .then((list) => {
+            if (!list) inflight = null
+            return list
+        })
     return inflight
 }
 

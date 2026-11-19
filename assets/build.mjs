@@ -76,10 +76,11 @@ const buildOptions = {
     "process.env.NODE_ENV": deploy ? '"production"' : '"development"',
     "process.env.MAPBOX_ACCESS_TOKEN": JSON.stringify(process.env.MAPBOX_ACCESS_TOKEN || ""),
     // Human-facing app.buoy.fish links (the timeline ⚙). Separate from the
-    // machine API base above: a human link must never ride a machine hostname
-    // (platform ADR-0010).
+    // machine API base below, with no fallback to it: a human link must never
+    // ride a machine hostname (platform ADR-0010). Pointing a dev build at a
+    // local app? Set APP_UI_BASE_URL and BUOY_API_BASE_URL together.
     "process.env.APP_UI_BASE_URL": JSON.stringify(
-      process.env.APP_UI_BASE_URL ?? process.env.BUOY_API_BASE_URL ?? "https://app.buoy.fish"
+      process.env.APP_UI_BASE_URL ?? "https://app.buoy.fish"
     ),
     "process.env.BUOY_API_BASE_URL": JSON.stringify(
       process.env.BUOY_API_BASE_URL ?? "https://app.buoy.fish"
