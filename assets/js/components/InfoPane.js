@@ -3,7 +3,7 @@ import classNames from 'classnames'
 import formatDistanceToNowStrict from 'date-fns/formatDistanceToNowStrict'
 import parseISO from 'date-fns/parseISO'
 import h3 from 'h3-js/dist/h3-js';
-import { getInitialProjects, fetchProjects } from '../utils/projects'
+import { getInitialProjects, fetchProjects, timelineDefaults } from '../utils/projects'
 import ProjectRow from './ProjectRow'
 
 function InfoPane(props) {
@@ -286,12 +286,12 @@ function InfoPane(props) {
             { showProjectsPane &&
                 <div className="projects-pane">
                     {projects.map(project => {
-                        const cfg = (props.timelineConfig && project.code && props.timelineConfig[project.code]) || null
+                        const { start } = timelineDefaults(project, props.timelineConfig)
                         return (
                             <ProjectRow
                                 key={project.code || project.name}
                                 project={project}
-                                start={cfg && cfg.start}
+                                start={start}
                                 onFlyToProject={props.onFlyToProject}
                                 onRunProjectTimeline={props.onRunProjectTimeline}
                                 onAfterAction={() => setShowProjectsPane(false)}

@@ -21,8 +21,8 @@ import WelcomeModal from "../components/WelcomeModal"
 import TimelineControl, { startOfLocalDay, endOfLocalDay } from "../components/TimelineControl"
 import { uplinkTileServerLayer, uplinkHotspotsLineLayer, uplinkRelayLineLayer, uplinkHotspotsCircleLayer, uplinkHotspotsHexLayer, uplinkChannelLayer, gatewayMarkerLayer, gatewayLabelLayer, selectedHexLayer, timelineRevealLayer, timelineRevealFilter as buildTimelineRevealFilter, otherHexLayer } from './Layers.js';
 import { get } from '../data/Rest'
-import { getInitialProjects, fetchProjects } from '../utils/projects'
-import { parseTimelineLink, buildTimelineLink } from '../utils/timelineLink'
+import { getInitialProjects, fetchProjects, timelineDefaults } from '../utils/projects'
+import { parseTimelineLink, buildTimelineLink, timelineSettingsUrl } from '../utils/timelineLink'
 import { firstSeenInBounds, boundsForView } from '../utils/timelineWindow'
 import { parseProjectLink, buildProjectPath, urlMirrorAction } from '../utils/projectLink'
 import { gatewayFeatures, gatewayRecordsIndex, refreshPopupGw, applyHeardToFeatures, applyHeardToPopup, keepNewerHeard } from '../utils/gatewayFeed'
@@ -211,7 +211,9 @@ const GATEWAY_RELOAD_GAP_MS = 60 * 1000;
 // project (user can still change it in the expanded scrubber). Missing/invalid
 // → empty config; such projects start at their first coverage in view
 // (utils/timelineWindow.js), or today − FALLBACK_LOOKBACK_DAYS when nothing is
-// in view, and speed 1. This is the interim home before app.buoy.fish serves it (behind auth).
+// in view, and speed 1. Legacy: app.buoy.fish now serves these per project
+// (utils/projects.js#timelineDefaults), and wins once its feed carries them;
+// this entry only covers an older app server.
 const TIMELINE_PROJECT_CONFIG = (() => {
   try { return JSON.parse(process.env.TIMELINE_PROJECT_CONFIG || "{}"); }
   catch (e) { console.warn("Invalid TIMELINE_PROJECT_CONFIG JSON:", e); return {}; }
@@ -401,12 +403,21 @@ function Map(props) {
     const [timelineMode, setTimelineMode] = useState(false);
     const [timelineGeoJson, setTimelineGeoJson] = useState(emptyFC);
     // When a project ▶ Timeline launch is in flight: holds the queued bloom
-    // window { start, end, frame } or null. start/end are epoch-ms; start is
-    // null when nothing configured it (the auto-play effect resolves it to the
-    // first coverage in `frame`, the launch's { lat, lng, zoom }). Set by
+    // window { start, end, frame, projectCode, startFromConfig,
+    // speedFromConfig } or null. start/end are epoch-ms. When start/speed come
+    // from the project's settings (no start=/speed= in a link) they are read
+    // when playback begins, from the freshest project list, so settings just
+    // edited in app.buoy.fish apply on this load. A null start = the first
+    // coverage in `frame` (the launch's { lat, lng, zoom }). Set by
     // launchTimeline alongside the fly + setTimelineMode(true), consumed by the
     // deterministic auto-play effect below once the timeline data has loaded.
     const [pendingPlay, setPendingPlay] = useState(null);
+    // The freshest project list (cache/fallback until the live fetch lands),
+    // read by the auto-play effect for each project's timeline settings.
+    const latestProjectsRef = useRef(getInitialProjects());
+    React.useEffect(() => {
+        fetchProjects().then(list => { if (list) latestProjectsRef.current = list; });
+    }, []);
     const timelineModeRef = useRef(false);
     React.useEffect(() => { timelineModeRef.current = timelineMode; }, [timelineMode]);
 
@@ -562,6 +573,13 @@ function Map(props) {
         if (!(timelineGeoJson.features && timelineGeoJson.features.length)) return;
         const timer = setTimeout(() => {
             let { start, end } = pendingPlay;
+            const { projectCode, startFromConfig, speedFromConfig } = pendingPlay;
+            if (startFromConfig || speedFromConfig) {
+                const project = (latestProjectsRef.current || []).find(p => p.code === projectCode) || null;
+                const cfg = timelineDefaults(project, TIMELINE_PROJECT_CONFIG);
+                if (startFromConfig) start = cfg.start ? startOfLocalDay(parseLocalDate(cfg.start)) : null;
+                if (speedFromConfig) setSpeed(cfg.speed);
+            }
             if (start == null) {
                 const canvas = mapRef.current?.getMap()?.getCanvas();
                 const { frame } = pendingPlay;
@@ -1251,7 +1269,7 @@ function Map(props) {
     // explicit so both the InfoPane project launch (config defaults) and a
     // shareable deep-link (URL-derived values) funnel through one path and reuse
     // the existing pendingPlay → data-loaded → auto-play machinery.
-    const launchTimeline = useCallback(({ projectCode, lat, lng, zoom, start, end, speed, baseline, loop, open }) => {
+    const launchTimeline = useCallback(({ projectCode, lat, lng, zoom, start, end, speed, baseline, loop, open, startFromConfig = false, speedFromConfig = false }) => {
         setViewState(prev => ({ ...prev, latitude: lat, longitude: lng, zoom }));
         setTimelineMode(true);
         // Reset to an empty window so nothing draws until pendingPlay sets the
@@ -1267,7 +1285,7 @@ function Map(props) {
         setShowBaseline(!!baseline);
         setLoop(!!loop);
         setTimelineExpanded(!!open);
-        setPendingPlay({ start, end, frame: { lat, lng, zoom } });
+        setPendingPlay({ start, end, frame: { lat, lng, zoom }, projectCode, startFromConfig, speedFromConfig });
     }, []);
 
     // Run the (global) Timeline framed on a project's region (InfoPane ▶ button).
@@ -1275,13 +1293,13 @@ function Map(props) {
     // the per-project config for start/speed, the project's coords/zoom for
     // framing, and the non-deep-link defaults (baseline on, loop off, minimized).
     const onRunProjectTimeline = useCallback((project) => {
-        const cfg = TIMELINE_PROJECT_CONFIG[project.code] || {};
-        // null = first coverage in view, resolved by the auto-play effect.
-        const start = cfg.start ? startOfLocalDay(parseLocalDate(cfg.start)) : null;
+        // Start and speed come from the project's settings, read by the
+        // auto-play effect when playback begins.
         const end = endOfLocalDay(Date.now());
         launchTimeline({
             projectCode: project.code, lat: project.lat, lng: project.lng, zoom: project.zoom || 12,
-            start, end, speed: cfg.speed || 1, baseline: true, loop: false, open: false,
+            start: null, end, speed: 1, baseline: true, loop: false, open: false,
+            startFromConfig: true, speedFromConfig: true,
         });
         // Released HERE rather than in launchTimeline, which the arriving
         // ?play= deep-link also calls — releasing there would rewrite the
@@ -1300,17 +1318,16 @@ function Map(props) {
         if (!intent) return;
         const launchFrom = (project) => {
             if (!project) { console.warn('timeline deep-link: unknown project', intent.play); return; }
-            const cfg = TIMELINE_PROJECT_CONFIG[project.code] || {};
-            // null = first coverage in view, resolved by the auto-play effect.
-            const cfgStart = cfg.start ? startOfLocalDay(parseLocalDate(cfg.start)) : null;
-            const cfgEnd = endOfLocalDay(Date.now());
-            let start = intent.start != null ? startOfLocalDay(intent.start) : cfgStart;
-            let end = intent.end != null ? endOfLocalDay(intent.end) : cfgEnd;
+            // start=/speed= in the link win; otherwise the project's settings,
+            // read by the auto-play effect when playback begins.
+            const today = endOfLocalDay(Date.now());
+            let start = intent.start != null ? startOfLocalDay(intent.start) : null;
+            let end = intent.end != null ? endOfLocalDay(intent.end) : today;
+            let startFromConfig = intent.start == null;
             if (start != null && end <= start) {
-                console.warn('timeline deep-link: end<=start, falling back to config window');
-                start = cfgStart; end = cfgEnd;
+                console.warn('timeline deep-link: end<=start, falling back to the project window');
+                start = null; startFromConfig = true; end = today;
             }
-            const speed = intent.speed != null ? intent.speed : (cfg.speed || 1);
             // Camera: the sender's exact lat/lng/zoom if the link carries them,
             // else the project's default framing.
             const lat = intent.lat != null ? intent.lat : project.lat;
@@ -1318,12 +1335,15 @@ function Map(props) {
             const zoom = intent.zoom != null ? intent.zoom : (project.zoom || 12);
             launchTimeline({
                 projectCode: project.code, lat, lng, zoom,
-                start, end, speed, baseline: intent.baseline, loop: intent.loop, open: intent.open,
+                start, end, speed: intent.speed || 1,
+                baseline: intent.baseline, loop: intent.loop, open: intent.open,
+                startFromConfig, speedFromConfig: intent.speed == null,
             });
         };
         const resolve = (list) => (list || []).find(p => p.code === intent.play) || null;
         // getInitialProjects() is synchronous (cache/fallback, never null) — the
-        // common case launches immediately.
+        // common case launches immediately. Timeline settings are read later,
+        // from the live list (latestProjectsRef), so a stale cache is fine here.
         const synced = resolve(getInitialProjects());
         if (synced) { launchFrom(synced); return; }
         // Cold cache for a non-fallback project: try the live list once.
@@ -1520,6 +1540,7 @@ function Map(props) {
                     expanded={timelineExpanded}
                     onToggleExpanded={() => setTimelineExpanded(e => !e)}
                     shareUrl={shareUrl}
+                    settingsUrl={timelineSettingsUrl(activeTimelineProjectCode, process.env.APP_UI_BASE_URL)}
                 />
             }
             <WelcomeModal showWelcomeModal={showWelcomeModal && !isHexDeepLink && !isTimelineDeepLink && !isProjectDeepLink} onCloseWelcomeModalClick={onCloseWelcomeModalClick} />

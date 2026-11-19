@@ -19,12 +19,14 @@
  * surprise.
  *
  * Public response shape (from /api/v1/public/projects):
- *   [{ code, name, lat, lng, zoom }, ...]
+ *   [{ code, name, lat, lng, zoom, timeline_start, timeline_speed }, ...]
+ * (the timeline fields since app.buoy.fish#1139; older servers omit them).
  * Note `lng` (not `lon`): matches the legacy hardcoded array shape this
  * module replaces, so InfoPane.js stays a near-identity swap.
  */
 
-const CACHE_KEY = "projects_v1"
+// v2: entries carry the timeline fields; a v1 cache predates them.
+const CACHE_KEY = "projects_v2"
 const FETCH_TIMEOUT_MS = 4000
 
 const API_BASE_URL = process.env.BUOY_API_BASE_URL || ""
@@ -40,7 +42,10 @@ function isFiniteNumber(n) {
     return typeof n === "number" && Number.isFinite(n)
 }
 
-function normalizeProject(raw) {
+const TIMELINE_SPEEDS = [1, 2, 4]
+const YMD = /^\d{4}-\d{2}-\d{2}$/
+
+export function normalizeProject(raw) {
     if (!raw || typeof raw !== "object") return null
     const code = typeof raw.code === "string" && raw.code.length > 0 ? raw.code : null
     const name = typeof raw.name === "string" && raw.name.length > 0 ? raw.name : null
@@ -52,7 +57,34 @@ function normalizeProject(raw) {
     if (lat < -90 || lat > 90) return null
     if (lng < -180 || lng > 180) return null
     if (zoom < 0 || zoom > 22) return null
-    return { code, name, lat, lng, zoom }
+    // Timeline defaults, edited per project in app.buoy.fish (null = unset).
+    const timeline_start = typeof raw.timeline_start === "string" && YMD.test(raw.timeline_start) ? raw.timeline_start : null
+    const timeline_speed = TIMELINE_SPEEDS.includes(raw.timeline_speed) ? raw.timeline_speed : null
+    // Whether the server sent the timeline fields at all (an older app, or
+    // FALLBACK_PROJECTS, doesn't). Kept explicitly so a cached, re-normalized
+    // entry, which always has the keys, still knows.
+    const timeline_from_app = typeof raw.timeline_from_app === "boolean"
+        ? raw.timeline_from_app
+        : ("timeline_start" in raw || "timeline_speed" in raw)
+    return { code, name, lat, lng, zoom, timeline_start, timeline_speed, timeline_from_app }
+}
+
+/**
+ * A project's timeline defaults. When app.buoy.fish serves the fields it is
+ * the source of truth, nulls included (an admin clearing the start means
+ * "first coverage in view"). Otherwise the legacy TIMELINE_PROJECT_CONFIG
+ * env entry, then the built-ins. `start` is 'YYYY-MM-DD' or null (null =
+ * first coverage in view); `speed` is 1, 2 or 4.
+ */
+export function timelineDefaults(project, envConfig) {
+    if (project && project.timeline_from_app) {
+        return { start: project.timeline_start || null, speed: project.timeline_speed || 1 }
+    }
+    const env = (project && project.code && envConfig && envConfig[project.code]) || {}
+    return {
+        start: typeof env.start === "string" && YMD.test(env.start) ? env.start : null,
+        speed: TIMELINE_SPEEDS.includes(env.speed) ? env.speed : 1,
+    }
 }
 
 function normalizeProjectsList(raw) {
@@ -76,6 +108,8 @@ function readCache() {
 
 function writeCache(projects) {
     try {
+        // The v1 entry predates the timeline fields; drop it.
+        localStorage.removeItem("projects_v1")
         localStorage.setItem(
             CACHE_KEY,
             JSON.stringify({ projects, fetchedAt: Date.now() })
@@ -106,9 +140,23 @@ export function getInitialProjects() {
  * to update React state on a non-null result so the current session
  * shows the freshest data.
  */
+// One request per page load, shared by every caller (InfoPane, Map.js's
+// timeline settings); a failed one is forgotten so a later call retries.
+let inflight = null
+
 export function fetchProjects() {
     if (!API_BASE_URL) return Promise.resolve(null)
+    if (inflight) return inflight
+    inflight = fetchProjectsOnce()
+        .catch(() => null)
+        .then((list) => {
+            if (!list) inflight = null
+            return list
+        })
+    return inflight
+}
 
+function fetchProjectsOnce() {
     const url = `${API_BASE_URL}/api/v1/public/projects`
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
