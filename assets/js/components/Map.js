@@ -204,21 +204,10 @@ const channel = socket.channel("h3:new")
 const DAY_MS = 24 * 60 * 60 * 1000;
 const GATEWAY_RELOAD_GAP_MS = 60 * 1000;
 
-// Per-project Timeline config, injected at build time from the
-// TIMELINE_PROJECT_CONFIG env var (.env.development locally; the server-side
-// .env in prod — see .env.production.example). Shape, keyed by project `code`:
-//   { "<code>": { "start": "YYYY-MM-DD", "speed": 1|2|4 }, ... }
-// `start` = the bloom start date; `speed` = the default sweep speed for that
-// project (user can still change it in the expanded scrubber). Missing/invalid
-// → empty config; such projects start at their first coverage in view
-// (utils/timelineWindow.js), or today − FALLBACK_LOOKBACK_DAYS when nothing is
-// in view, and speed 1. Legacy: app.buoy.fish now serves these per project
-// (utils/projects.js#timelineDefaults), and wins once its feed carries them;
-// this entry only covers an older app server.
-const TIMELINE_PROJECT_CONFIG = (() => {
-  try { return JSON.parse(process.env.TIMELINE_PROJECT_CONFIG || "{}"); }
-  catch (e) { console.warn("Invalid TIMELINE_PROJECT_CONFIG JSON:", e); return {}; }
-})();
+// Per-project timeline start/speed are edited in app.buoy.fish and served on
+// its project feed (utils/projects.js#timelineDefaults). A project with no
+// start replays from its first coverage in view (utils/timelineWindow.js), or
+// today − FALLBACK_LOOKBACK_DAYS when nothing is in view.
 const FALLBACK_LOOKBACK_DAYS = 60;
 
 // 'YYYY-MM-DD' -> epoch-ms at LOCAL midnight of that calendar day.
@@ -582,7 +571,7 @@ function Map(props) {
             const { projectCode, startFromConfig, speedFromConfig } = pendingPlay;
             if (startFromConfig || speedFromConfig) {
                 const project = (latestProjectsRef.current || []).find(p => p.code === projectCode) || null;
-                const cfg = timelineDefaults(project, TIMELINE_PROJECT_CONFIG);
+                const cfg = timelineDefaults(project);
                 if (startFromConfig) start = cfg.start ? startOfLocalDay(parseLocalDate(cfg.start)) : null;
                 if (speedFromConfig) setSpeed(cfg.speed);
             }
@@ -1568,7 +1557,7 @@ function Map(props) {
                 }
 
             </MapGL>
-            {!embedPicker && <InfoPane hexId={hexId} bestRssi={bestRssi} snr={snr} uplinks={uplinks} gatewayRecords={gatewayRecords} showHexPane={showHexPane} onCloseHexPaneClick={onCloseHexPaneClick} showHexPaneCloseButton={showHexPaneCloseButton} showGateways={showGateways} onToggleGateways={onToggleGateways} hideCoverage={hideCoverage} onToggleCoverage={onToggleCoverage} showOtherHexes={showOtherHexes} onToggleOtherHexes={onToggleOtherHexes} onFlyToProject={onFlyToProject} onRunProjectTimeline={onRunProjectTimeline} timelineConfig={TIMELINE_PROJECT_CONFIG} />}
+            {!embedPicker && <InfoPane hexId={hexId} bestRssi={bestRssi} snr={snr} uplinks={uplinks} gatewayRecords={gatewayRecords} showHexPane={showHexPane} onCloseHexPaneClick={onCloseHexPaneClick} showHexPaneCloseButton={showHexPaneCloseButton} showGateways={showGateways} onToggleGateways={onToggleGateways} hideCoverage={hideCoverage} onToggleCoverage={onToggleCoverage} showOtherHexes={showOtherHexes} onToggleOtherHexes={onToggleOtherHexes} onFlyToProject={onFlyToProject} onRunProjectTimeline={onRunProjectTimeline} />}
             {timelineMode && timeDomain.minT !== null && timeDomain.maxT !== null &&
                 <TimelineControl
                     minT={timeDomain.minT}

@@ -8,8 +8,8 @@
 //
 // `play` (project code) is required; absent ⇒ not a Timeline deep-link. The rest
 // are optional; when absent/invalid, parse returns null for that field so the
-// caller (Map.js) can fall back to per-project TIMELINE_PROJECT_CONFIG, then
-// hardcoded defaults. lat/lng/zoom capture the sender's exact camera so the
+// caller (Map.js) can fall back to the project's timeline settings from
+// app.buoy.fish, then hardcoded defaults. lat/lng/zoom capture the sender's exact camera so the
 // receiver sees the same framing (overriding the project's default coords/zoom).
 // This module is intentionally framework-free (no React, no Map import) so it's
 // trivially unit-testable from plain Node.
