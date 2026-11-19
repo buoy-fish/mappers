@@ -5,6 +5,7 @@ import { h3ToGeo } from "h3-js";
 import { getInitialMapView, refreshMapConfigInBackground } from "../utils/mapConfig"
 import { parseProjectLink } from "../utils/projectLink"
 import { getInitialProjects } from "../utils/projects"
+import { parseEmbedPicker } from "../utils/embedPicker"
 
 function MapScreen() {
   let routerParams = useParams();
@@ -32,10 +33,17 @@ function MapScreen() {
     return getInitialProjects().find((p) => p.code === intent.project) || null
   }, []) // eslint-disable-line react-hooks/exhaustive-deps -- first paint only
 
+  // Embedded as app.buoy.fish's project map picker (utils/embedPicker.js).
+  const [embedPicker] = useState(() => parseEmbedPicker(location.search))
+
   let latitude
   let longitude
   let zoom
-  if (routerParams.hexId != null) {
+  if (embedPicker && embedPicker.lat != null && embedPicker.lng != null) {
+    latitude = embedPicker.lat
+    longitude = embedPicker.lng
+    zoom = embedPicker.zoom != null ? embedPicker.zoom : initialView.zoom
+  } else if (routerParams.hexId != null) {
     // Deep-link to a specific H3 hex — overrides the admin default. Existing
     // /uplinks/hex/:hexId behavior is unchanged.
     const hotspot_coords = h3ToGeo(routerParams.hexId)
@@ -59,6 +67,7 @@ function MapScreen() {
         startLongitude={longitude}
         startZoom={zoom}
         routerParams={routerParams}
+        embedPicker={embedPicker}
       />
     </div>
   )

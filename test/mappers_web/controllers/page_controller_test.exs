@@ -5,6 +5,23 @@ defmodule MappersWeb.PageControllerTest do
     assert conn |> get("/") |> html_response(200) =~ ~s(<div id="react-app">)
   end
 
+  # app.buoy.fish embeds the public map (`/?embed=picker`) as its projects'
+  # "Default map view" picker, so the app's origin may frame the page; no
+  # other origin may (clickjacking).
+  test "GET / lets app.buoy.fish frame the map, and nobody else", %{conn: conn} do
+    [csp] = conn |> get("/?embed=picker") |> get_resp_header("content-security-policy")
+    assert csp =~ "frame-ancestors 'self' https://app.buoy.fish"
+    refute csp =~ "frame-ancestors *"
+    assert csp =~ "base-uri 'self'"
+  end
+
+  test "every other page keeps the default frame-ancestors 'self'", %{conn: conn} do
+    for path <- ["/", "/gulf-of-nicoya", "/uplinks/hex/8928308280fffff"] do
+      [csp] = conn |> get(path) |> get_resp_header("content-security-policy")
+      assert csp =~ "frame-ancestors 'self';", path
+    end
+  end
+
   test "GET / emits default branded link-preview metadata", %{conn: conn} do
     html = conn |> get("/") |> html_response(200)
     assert html =~ ~s(property="og:title" content="Buoy.Fish Coverage Map")

@@ -7,6 +7,8 @@ defmodule MappersWeb.Router do
     plug :fetch_flash
     plug :protect_from_forgery
     plug :put_secure_browser_headers
+    # After the secure headers: lets app.buoy.fish frame the map picker.
+    plug MappersWeb.Plug.FrameAncestors
     plug MappersWeb.Plug.RateLimit, ["browser_actions", 60]
   end
 
