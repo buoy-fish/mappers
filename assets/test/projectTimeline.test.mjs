@@ -48,3 +48,25 @@ test("the settings link opens the project's map view in the app, by code", () =>
     assert.equal(timelineSettingsUrl(null, 'https://app.buoy.fish'), null)
     assert.equal(timelineSettingsUrl('x', ''), null)
 })
+
+// Once app.buoy.fish serves the fields, its null is a choice ("first coverage,
+// 1×"), not "unset": an admin clearing the start must not fall back to the
+// env entry the app replaced.
+test("the app's null wins over the env config once the feed carries the fields", () => {
+    const project = normalizeProject({ ...RAW, timeline_start: null, timeline_speed: null })
+    const env = { 'gulf-of-nicoya-costa-rica': { start: '2026-09-19', speed: 2 } }
+    assert.deepEqual(timelineDefaults(project, env), { start: null, speed: 1 })
+})
+
+test('malformed env values are ignored', () => {
+    const env = { 'gulf-of-nicoya-costa-rica': { start: '5/1/2026', speed: 3 } }
+    assert.deepEqual(timelineDefaults(normalizeProject(RAW), env), { start: null, speed: 1 })
+})
+
+test('a cached project (re-normalized) keeps whether the app served the fields', () => {
+    const fromOldFeed = normalizeProject(normalizeProject(RAW))
+    const env = { 'gulf-of-nicoya-costa-rica': { start: '2026-09-19', speed: 2 } }
+    assert.deepEqual(timelineDefaults(fromOldFeed, env), { start: '2026-09-19', speed: 2 })
+    const fromNewFeed = normalizeProject(normalizeProject({ ...RAW, timeline_start: null }))
+    assert.deepEqual(timelineDefaults(fromNewFeed, env), { start: null, speed: 1 })
+})

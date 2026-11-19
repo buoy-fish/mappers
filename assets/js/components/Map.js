@@ -21,9 +21,8 @@ import WelcomeModal from "../components/WelcomeModal"
 import TimelineControl, { startOfLocalDay, endOfLocalDay } from "../components/TimelineControl"
 import { uplinkTileServerLayer, uplinkHotspotsLineLayer, uplinkRelayLineLayer, uplinkHotspotsCircleLayer, uplinkHotspotsHexLayer, uplinkChannelLayer, gatewayMarkerLayer, gatewayLabelLayer, selectedHexLayer, timelineRevealLayer, timelineRevealFilter as buildTimelineRevealFilter, otherHexLayer } from './Layers.js';
 import { get } from '../data/Rest'
-import { getInitialProjects, fetchProjects } from '../utils/projects'
+import { getInitialProjects, fetchProjects, timelineDefaults } from '../utils/projects'
 import { parseTimelineLink, buildTimelineLink, timelineSettingsUrl } from '../utils/timelineLink'
-import { timelineDefaults } from '../utils/projects'
 import { firstSeenInBounds, boundsForView } from '../utils/timelineWindow'
 import { parseProjectLink, buildProjectPath, urlMirrorAction } from '../utils/projectLink'
 import { gatewayFeatures, gatewayRecordsIndex, refreshPopupGw, applyHeardToFeatures, applyHeardToPopup, keepNewerHeard } from '../utils/gatewayFeed'
@@ -212,12 +211,17 @@ const GATEWAY_RELOAD_GAP_MS = 60 * 1000;
 // project (user can still change it in the expanded scrubber). Missing/invalid
 // → empty config; such projects start at their first coverage in view
 // (utils/timelineWindow.js), or today − FALLBACK_LOOKBACK_DAYS when nothing is
-// in view, and speed 1. This is the interim home before app.buoy.fish serves it (behind auth).
+// in view, and speed 1. Legacy: app.buoy.fish now serves these per project
+// (utils/projects.js#timelineDefaults), and wins once its feed carries them;
+// this entry only covers an older app server.
 const TIMELINE_PROJECT_CONFIG = (() => {
   try { return JSON.parse(process.env.TIMELINE_PROJECT_CONFIG || "{}"); }
   catch (e) { console.warn("Invalid TIMELINE_PROJECT_CONFIG JSON:", e); return {}; }
 })();
 const FALLBACK_LOOKBACK_DAYS = 60;
+// How long a ?play= deep link waits for the live project list (fresh
+// timeline settings) before launching from the cached one.
+const DEEP_LINK_PROJECTS_WAIT_MS = 1500;
 
 // 'YYYY-MM-DD' -> epoch-ms at LOCAL midnight of that calendar day.
 function parseLocalDate(iso) {
@@ -1324,16 +1328,16 @@ function Map(props) {
             });
         };
         const resolve = (list) => (list || []).find(p => p.code === intent.play) || null;
-        // getInitialProjects() is synchronous (cache/fallback, never null) — the
-        // common case launches immediately.
-        const synced = resolve(getInitialProjects());
-        if (synced) { launchFrom(synced); return; }
-        // Cold cache for a non-fallback project: try the live list once.
+        // Prefer the live list, so timeline settings just edited in
+        // app.buoy.fish apply now, not on the next visit; the cache from the
+        // last visit (or the fallback list) if it is slow or down.
         let cancelled = false;
-        fetchProjects().then(list => {
+        const slow = new Promise(r => setTimeout(() => r(null), DEEP_LINK_PROJECTS_WAIT_MS));
+        Promise.race([fetchProjects(), slow]).then(list => {
             if (cancelled) return;
-            if (!list) { console.warn('timeline deep-link: project list unavailable for', intent.play); return; }
-            launchFrom(resolve(list));
+            const project = resolve(list) || resolve(getInitialProjects());
+            if (!project) { console.warn('timeline deep-link: unknown project', intent.play); return; }
+            launchFrom(project);
         });
         return () => { cancelled = true; };
     }, []); // eslint-disable-line react-hooks/exhaustive-deps -- run once on mount
@@ -1522,7 +1526,7 @@ function Map(props) {
                     expanded={timelineExpanded}
                     onToggleExpanded={() => setTimelineExpanded(e => !e)}
                     shareUrl={shareUrl}
-                    settingsUrl={timelineSettingsUrl(activeTimelineProjectCode, process.env.BUOY_API_BASE_URL)}
+                    settingsUrl={timelineSettingsUrl(activeTimelineProjectCode, process.env.APP_UI_BASE_URL)}
                 />
             }
             <WelcomeModal showWelcomeModal={showWelcomeModal && !isHexDeepLink && !isTimelineDeepLink && !isProjectDeepLink} onCloseWelcomeModalClick={onCloseWelcomeModalClick} />
