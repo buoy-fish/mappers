@@ -33,7 +33,18 @@ test('null when nothing is in view or there are no bounds', () => {
     assert.equal(firstSeenInBounds([hex(10.0, -85.0, 3000)], null), null)
 })
 
-test('a view crossing the antimeridian (west > east) still matches', () => {
-    const fiji = { west: 177, south: -19, east: -178, north: -16 }
-    assert.equal(firstSeenInBounds([hex(-17.5, 179, 10), hex(-17.5, -179, 5)], fiji), 5)
+test('a view crossing the antimeridian matches hexes on both sides', () => {
+    const feats = [hex(-17.5, 179, 10), hex(-17.5, -179, 5), hex(-17.5, 170, 1)]
+    // MapLibre's getBounds() does not wrap: past 180° east reads 182.
+    assert.equal(firstSeenInBounds(feats, { west: 177, south: -19, east: 182, north: -16 }), 5)
+    // ...and the same view framed from the west side reads -183..-178.
+    assert.equal(firstSeenInBounds(feats, { west: -183, south: -19, east: -178, north: -16 }), 5)
+})
+
+test('a view wider than the world matches every longitude', () => {
+    assert.equal(firstSeenInBounds([hex(0, -170, 7), hex(0, 170, 3)], { west: -400, south: -10, east: 400, north: 10 }), 3)
+})
+
+test('a hex without a numeric first_seen is skipped, not poisonous', () => {
+    assert.equal(firstSeenInBounds([hex(10.0, -85.0, undefined), hex(10.0, -85.0, 3000)], BOUNDS), 3000)
 })

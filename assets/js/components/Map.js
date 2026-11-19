@@ -557,15 +557,17 @@ function Map(props) {
     React.useEffect(() => {
         if (!pendingPlay) return;
         if (!(timelineGeoJson.features && timelineGeoJson.features.length)) return;
-        const { end } = pendingPlay;
         const timer = setTimeout(() => {
-            let start = pendingPlay.start;
+            let { start, end } = pendingPlay;
             if (start == null) {
                 const b = mapRef.current?.getMap()?.getBounds();
+                if (!b) console.warn('timeline: no map bounds yet; starting at the lookback window');
                 const bounds = b && { west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() };
                 const first = firstSeenInBounds(timelineGeoJson.features, bounds);
                 start = startOfLocalDay(first != null ? first : Date.now() - FALLBACK_LOOKBACK_DAYS * DAY_MS);
-                if (start > end) start = startOfLocalDay(end);
+                // A link's end= before the first coverage would leave an empty
+                // window: end today instead, as the configured window did.
+                if (start > end) end = endOfLocalDay(Date.now());
             }
             cursorRef.current = start;
             setRangeStart(start);
@@ -753,12 +755,15 @@ function Map(props) {
         fetch('/api/v1/coverage/timeline')
             .then(res => res.json())
             .then(rows => {
-                const features = (rows || []).map(row => ({
-                    type: "Feature",
-                    geometry: { type: "Polygon", coordinates: [h3ToGeoBoundary(row.h, true)] },
-                    // lat/lng = hex centre, for the first-coverage-in-view start.
-                    properties: (([lat, lng]) => ({ id: row.h, best_rssi: row.r, first_seen: row.t, lat, lng }))(h3ToGeo(row.h))
-                }));
+                const features = (rows || []).map(row => {
+                    // Hex centre, for the first-coverage-in-view start.
+                    const [lat, lng] = h3ToGeo(row.h);
+                    return {
+                        type: "Feature",
+                        geometry: { type: "Polygon", coordinates: [h3ToGeoBoundary(row.h, true)] },
+                        properties: { id: row.h, best_rssi: row.r, first_seen: row.t, lat, lng }
+                    };
+                });
                 setTimelineGeoJson({ type: "FeatureCollection", features });
             })
             .catch(err => console.error('Failed to load timeline data:', err));

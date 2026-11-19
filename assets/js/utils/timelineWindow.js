@@ -5,13 +5,23 @@
 //
 // Framework-free so it's unit-testable from plain Node.
 //
-// Ceiling: a plain MIN, so one stray early hex in view drags the start back to
-// it. Upgrade path if that bites: a low percentile (e.g. the 1st) of the
-// in-view first_seen values.
+// Ceilings:
+//   - A plain MIN, so one stray early hex in view drags the start back to it.
+//     Upgrade path: a low percentile (e.g. the 1st) of in-view first_seen.
+//   - "In view" is the whole map canvas, including any part an overlay (the
+//     info pane, the scrubber) covers. Upgrade path: inset the bounds by the
+//     map's padding / the pane's width.
 
+// MapLibre's getBounds() doesn't wrap longitude: a view across the
+// antimeridian reads e.g. west 177, east 182. Measure the hex's offset east of
+// `west` modulo 360 and compare it with the view's span, which handles that,
+// the already-wrapped form (west > east), and views wider than the world.
 function lngInRange(lng, west, east) {
-    // west > east means the view crosses the antimeridian.
-    return west <= east ? lng >= west && lng <= east : lng >= west || lng <= east;
+    let span = east - west;
+    if (span < 0) span += 360;
+    if (span >= 360) return true;
+    const offset = (((lng - west) % 360) + 360) % 360;
+    return offset <= span;
 }
 
 // features: GeoJSON features whose properties carry { lat, lng, first_seen }
@@ -24,7 +34,7 @@ export function firstSeenInBounds(features, bounds) {
     let min = null;
     for (const f of features) {
         const p = f && f.properties;
-        if (!p) continue;
+        if (!p || typeof p.first_seen !== 'number') continue;
         if (p.lat < south || p.lat > north || !lngInRange(p.lng, west, east)) continue;
         if (min === null || p.first_seen < min) min = p.first_seen;
     }
