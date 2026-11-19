@@ -11,6 +11,8 @@
 //   - "In view" is the whole map canvas, including any part an overlay (the
 //     info pane, the scrubber) covers. Upgrade path: inset the bounds by the
 //     map's padding / the pane's width.
+//   - A hex is in view when its CENTRE is; one straddling the edge counts by
+//     its centre. Upgrade path: test the hex boundary's bbox.
 
 // MapLibre's getBounds() doesn't wrap longitude: a view across the
 // antimeridian reads e.g. west 177, east 182. Measure the hex's offset east of
@@ -39,4 +41,24 @@ export function firstSeenInBounds(features, bounds) {
         if (min === null || p.first_seen < min) min = p.first_seen;
     }
     return min;
+}
+
+// The { west, south, east, north } a web-mercator map shows when centred on
+// { lat, lng } at `zoom` in a width × height pixel canvas (MapLibre's 512px
+// tiles, no pitch or bearing). Longitudes come back unwrapped, as MapLibre's
+// getBounds() returns them. Used to resolve the start from the launch's own
+// framing rather than wherever the camera is when auto-play fires.
+export function boundsForView({ lat, lng, zoom }, width, height) {
+    const world = 512 * 2 ** zoom;
+    const x = ((lng + 180) / 360) * world;
+    const phi = (lat * Math.PI) / 180;
+    const y = ((1 - Math.log(Math.tan(Math.PI / 4 + phi / 2)) / Math.PI) / 2) * world;
+    const toLng = (px) => (px / world) * 360 - 180;
+    const toLat = (py) => (Math.atan(Math.sinh(Math.PI * (1 - (2 * py) / world))) * 180) / Math.PI;
+    return {
+        west: toLng(x - width / 2),
+        east: toLng(x + width / 2),
+        north: toLat(y - height / 2),
+        south: toLat(y + height / 2),
+    };
 }

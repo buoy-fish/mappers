@@ -23,7 +23,7 @@ import { uplinkTileServerLayer, uplinkHotspotsLineLayer, uplinkRelayLineLayer, u
 import { get } from '../data/Rest'
 import { getInitialProjects, fetchProjects } from '../utils/projects'
 import { parseTimelineLink, buildTimelineLink } from '../utils/timelineLink'
-import { firstSeenInBounds } from '../utils/timelineWindow'
+import { firstSeenInBounds, boundsForView } from '../utils/timelineWindow'
 import { parseProjectLink, buildProjectPath, urlMirrorAction } from '../utils/projectLink'
 import { gatewayFeatures, gatewayRecordsIndex, refreshPopupGw, applyHeardToFeatures, applyHeardToPopup, keepNewerHeard } from '../utils/gatewayFeed'
 import { geoToH3, h3ToGeo, h3ToGeoBoundary } from "h3-js";
@@ -401,9 +401,11 @@ function Map(props) {
     const [timelineMode, setTimelineMode] = useState(false);
     const [timelineGeoJson, setTimelineGeoJson] = useState(emptyFC);
     // When a project ▶ Timeline launch is in flight: holds the queued bloom
-    // window { start, end } (epoch-ms), or null. Set by onRunProjectTimeline
-    // alongside the fly + setTimelineMode(true), consumed by the deterministic
-    // auto-play effect below once the timeline data has loaded.
+    // window { start, end, frame } or null. start/end are epoch-ms; start is
+    // null when nothing configured it (the auto-play effect resolves it to the
+    // first coverage in `frame`, the launch's { lat, lng, zoom }). Set by
+    // launchTimeline alongside the fly + setTimelineMode(true), consumed by the
+    // deterministic auto-play effect below once the timeline data has loaded.
     const [pendingPlay, setPendingPlay] = useState(null);
     const timelineModeRef = useRef(false);
     React.useEffect(() => { timelineModeRef.current = timelineMode; }, [timelineMode]);
@@ -551,23 +553,28 @@ function Map(props) {
 
     // Deterministic one-shot auto-play. Waits for the timeline data to load, then
     // ~800ms for the fly to settle, then plays the bloom over the pending window.
-    // A null start means "nothing configured it": resolve it now, once the
-    // camera has settled, to the earliest hex in view (falling back to the
-    // lookback window when the view is empty).
+    // A null start means "nothing configured it": resolve it to the earliest
+    // hex in the LAUNCH's framing (boundsForView over the canvas size), so a
+    // pan before auto-play fires can't move it; the lookback window when that
+    // view is empty.
     React.useEffect(() => {
         if (!pendingPlay) return;
         if (!(timelineGeoJson.features && timelineGeoJson.features.length)) return;
         const timer = setTimeout(() => {
             let { start, end } = pendingPlay;
             if (start == null) {
-                const b = mapRef.current?.getMap()?.getBounds();
-                if (!b) console.warn('timeline: no map bounds yet; starting at the lookback window');
-                const bounds = b && { west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() };
+                const canvas = mapRef.current?.getMap()?.getCanvas();
+                const { frame } = pendingPlay;
+                if (!canvas || !frame) console.warn('timeline: no map canvas or framing; starting at the lookback window');
+                const bounds = canvas && frame ? boundsForView(frame, canvas.clientWidth, canvas.clientHeight) : null;
                 const first = firstSeenInBounds(timelineGeoJson.features, bounds);
                 start = startOfLocalDay(first != null ? first : Date.now() - FALLBACK_LOOKBACK_DAYS * DAY_MS);
                 // A link's end= before the first coverage would leave an empty
                 // window: end today instead, as the configured window did.
-                if (start > end) end = endOfLocalDay(Date.now());
+                if (start > end) {
+                    console.warn('timeline: end precedes the first coverage in view; ending today');
+                    end = endOfLocalDay(Date.now());
+                }
             }
             cursorRef.current = start;
             setRangeStart(start);
@@ -1260,7 +1267,7 @@ function Map(props) {
         setShowBaseline(!!baseline);
         setLoop(!!loop);
         setTimelineExpanded(!!open);
-        setPendingPlay({ start, end });
+        setPendingPlay({ start, end, frame: { lat, lng, zoom } });
     }, []);
 
     // Run the (global) Timeline framed on a project's region (InfoPane ▶ button).

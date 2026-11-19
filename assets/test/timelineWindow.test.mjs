@@ -48,3 +48,29 @@ test('a view wider than the world matches every longitude', () => {
 test('a hex without a numeric first_seen is skipped, not poisonous', () => {
     assert.equal(firstSeenInBounds([hex(10.0, -85.0, undefined), hex(10.0, -85.0, 3000)], BOUNDS), 3000)
 })
+
+// The start is resolved from the launch's own framing, not from whatever the
+// camera shows when auto-play fires (a pan in between must not move it).
+import { boundsForView } from '../js/utils/timelineWindow.js'
+
+const close = (a, b, eps = 1e-3) => Math.abs(a - b) < eps
+
+test('bounds of a view at the equator: 512px world at zoom 0', () => {
+    // At zoom 0 the 512px world spans 360° of longitude, so 256px = 180°.
+    const b = boundsForView({ lat: 0, lng: 0, zoom: 0 }, 256, 256)
+    assert.ok(close(b.west, -90) && close(b.east, 90), JSON.stringify(b))
+    assert.ok(close(b.north, -b.south) && b.north > 0)
+})
+
+test('bounds narrow as zoom grows and stay centred on the framing', () => {
+    const b = boundsForView({ lat: 10.07, lng: -85.03, zoom: 8.3 }, 1200, 800)
+    assert.ok(b.west < -85.03 && b.east > -85.03 && b.south < 10.07 && b.north > 10.07)
+    // 1200px at z8.3 is ~2.6° of longitude.
+    assert.ok(close(b.east - b.west, 1200 / (512 * 2 ** 8.3) * 360))
+})
+
+test('bounds across the antimeridian come back unwrapped, like MapLibre', () => {
+    const b = boundsForView({ lat: -17.5, lng: 179.5, zoom: 7 }, 1000, 600)
+    assert.ok(b.east > 180, JSON.stringify(b))
+    assert.equal(firstSeenInBounds([hex(-17.5, -179.8, 5)], b), 5)
+})
