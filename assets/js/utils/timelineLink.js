@@ -53,8 +53,8 @@ export function parseLocalYMD(iso) {
     return t;
 }
 
-function boolParam(v) {
-    if (v == null) return false;
+function boolParam(v, dflt = false) {
+    if (v == null) return dflt;
     const s = String(v).toLowerCase();
     return s === '1' || s === 'true';
 }
@@ -83,7 +83,8 @@ export function buildTimelineLink(state, origin) {
 // Parse a raw query string (location.search) into a normalized intent, or null
 // when `play` is absent. Does NOT resolve the project (that needs the projects
 // list, which lives in Map.js). start/end/speed are null when absent/invalid so
-// the caller can apply config fallbacks; booleans default to false.
+// the caller can apply config fallbacks; booleans default to false, except
+// baseline, which defaults to true.
 export function parseTimelineLink(search) {
     const p = new URLSearchParams(search || '');
     const play = p.get('play');
@@ -97,7 +98,8 @@ export function parseTimelineLink(search) {
         start: startRaw != null ? parseLocalYMD(startRaw) : null,
         end: endRaw != null ? parseLocalYMD(endRaw) : null,
         speed: VALID_SPEEDS.includes(speedNum) ? speedNum : null,
-        baseline: boolParam(p.get('baseline')),
+        // Baseline defaults ON (GLOSSARY): the timeline's end should match the map.
+        baseline: boolParam(p.get('baseline'), true),
         loop: boolParam(p.get('loop')),
         open: boolParam(p.get('open')),
         lat: numInRange(p.get('lat'), -90, 90),

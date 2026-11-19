@@ -6,13 +6,13 @@ import { useRef, useCallback, useState } from 'react';
 // ----------------------------------------------------------------------------
 // Vocabulary (see GLOSSARY.md):
 //   - Cumulative coverage as-of T: all hexes with first_seen <= T.
-//   - Baseline: hexes with first_seen < rangeStart (dimmed beneath the bloom).
+//   - Baseline: hexes with first_seen < rangeStart (shown by default, same style).
 //   - Bloom:    in-range hexes (rangeStart <= first_seen <= cursor) revealing
 //               as the cursor advances.
 //   - Cursor/playhead: the instant currently shown; continuous epoch-ms.
 //
 // All control STATE lives in Map.js and is passed down here as props, so the
-// two timeline Layers' filters stay declarative props driven by rangeStart /
+// timeline Layer's filter stays a declarative prop driven by rangeStart /
 // cursor. This component is the presentation + interaction layer only.
 //
 // Track domain mapping:
