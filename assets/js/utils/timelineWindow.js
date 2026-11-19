@@ -1,0 +1,64 @@
+// Where a timeline replay starts when nothing configures it (no start in the
+// project's timeline settings, no `start=` in the link): the earliest
+// first_seen among the hexes in view, so the replay shows the project's whole
+// build-up instead of opening on a pre-filled map.
+//
+// Framework-free so it's unit-testable from plain Node.
+//
+// Ceilings:
+//   - A plain MIN, so one stray early hex in view drags the start back to it.
+//     Upgrade path: a low percentile (e.g. the 1st) of in-view first_seen.
+//   - "In view" is the whole map canvas, including any part an overlay (the
+//     info pane, the scrubber) covers. Upgrade path: inset the bounds by the
+//     map's padding / the pane's width.
+//   - A hex is in view when its CENTRE is; one straddling the edge counts by
+//     its centre. Upgrade path: test the hex boundary's bbox.
+
+// MapLibre's getBounds() doesn't wrap longitude: a view across the
+// antimeridian reads e.g. west 177, east 182. Measure the hex's offset east of
+// `west` modulo 360 and compare it with the view's span, which handles that,
+// the already-wrapped form (west > east), and views wider than the world.
+function lngInRange(lng, west, east) {
+    let span = east - west;
+    if (span < 0) span += 360;
+    if (span >= 360) return true;
+    const offset = (((lng - west) % 360) + 360) % 360;
+    return offset <= span;
+}
+
+// features: GeoJSON features whose properties carry { lat, lng, first_seen }
+// (the hex centre and its epoch-ms first-seen). bounds: { west, south, east,
+// north } in degrees. Returns the earliest in-view first_seen, or null when
+// no hex is in view (or bounds are missing).
+export function firstSeenInBounds(features, bounds) {
+    if (!bounds || !features) return null;
+    const { west, south, east, north } = bounds;
+    let min = null;
+    for (const f of features) {
+        const p = f && f.properties;
+        if (!p || typeof p.first_seen !== 'number') continue;
+        if (p.lat < south || p.lat > north || !lngInRange(p.lng, west, east)) continue;
+        if (min === null || p.first_seen < min) min = p.first_seen;
+    }
+    return min;
+}
+
+// The { west, south, east, north } a web-mercator map shows when centred on
+// { lat, lng } at `zoom` in a width × height pixel canvas (MapLibre's 512px
+// tiles, no pitch or bearing). Longitudes come back unwrapped, as MapLibre's
+// getBounds() returns them. Used to resolve the start from the launch's own
+// framing rather than wherever the camera is when auto-play fires.
+export function boundsForView({ lat, lng, zoom }, width, height) {
+    const world = 512 * 2 ** zoom;
+    const x = ((lng + 180) / 360) * world;
+    const phi = (lat * Math.PI) / 180;
+    const y = ((1 - Math.log(Math.tan(Math.PI / 4 + phi / 2)) / Math.PI) / 2) * world;
+    const toLng = (px) => (px / world) * 360 - 180;
+    const toLat = (py) => (Math.atan(Math.sinh(Math.PI * (1 - (2 * py) / world))) * 180) / Math.PI;
+    return {
+        west: toLng(x - width / 2),
+        east: toLng(x + width / 2),
+        north: toLat(y - height / 2),
+        south: toLat(y + height / 2),
+    };
+}

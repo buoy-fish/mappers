@@ -23,6 +23,7 @@ import { uplinkTileServerLayer, uplinkHotspotsLineLayer, uplinkRelayLineLayer, u
 import { get } from '../data/Rest'
 import { getInitialProjects, fetchProjects } from '../utils/projects'
 import { parseTimelineLink, buildTimelineLink } from '../utils/timelineLink'
+import { firstSeenInBounds, boundsForView } from '../utils/timelineWindow'
 import { parseProjectLink, buildProjectPath, urlMirrorAction } from '../utils/projectLink'
 import { gatewayFeatures, gatewayRecordsIndex, refreshPopupGw, applyHeardToFeatures, applyHeardToPopup, keepNewerHeard } from '../utils/gatewayFeed'
 import { geoToH3, h3ToGeo, h3ToGeoBoundary } from "h3-js";
@@ -208,8 +209,9 @@ const GATEWAY_RELOAD_GAP_MS = 60 * 1000;
 //   { "<code>": { "start": "YYYY-MM-DD", "speed": 1|2|4 }, ... }
 // `start` = the bloom start date; `speed` = the default sweep speed for that
 // project (user can still change it in the expanded scrubber). Missing/invalid
-// → empty config; such projects fall back to today − FALLBACK_LOOKBACK_DAYS and
-// speed 1. This is the interim home before app.buoy.fish serves it (behind auth).
+// → empty config; such projects start at their first coverage in view
+// (utils/timelineWindow.js), or today − FALLBACK_LOOKBACK_DAYS when nothing is
+// in view, and speed 1. This is the interim home before app.buoy.fish serves it (behind auth).
 const TIMELINE_PROJECT_CONFIG = (() => {
   try { return JSON.parse(process.env.TIMELINE_PROJECT_CONFIG || "{}"); }
   catch (e) { console.warn("Invalid TIMELINE_PROJECT_CONFIG JSON:", e); return {}; }
@@ -399,9 +401,11 @@ function Map(props) {
     const [timelineMode, setTimelineMode] = useState(false);
     const [timelineGeoJson, setTimelineGeoJson] = useState(emptyFC);
     // When a project ▶ Timeline launch is in flight: holds the queued bloom
-    // window { start, end } (epoch-ms), or null. Set by onRunProjectTimeline
-    // alongside the fly + setTimelineMode(true), consumed by the deterministic
-    // auto-play effect below once the timeline data has loaded.
+    // window { start, end, frame } or null. start/end are epoch-ms; start is
+    // null when nothing configured it (the auto-play effect resolves it to the
+    // first coverage in `frame`, the launch's { lat, lng, zoom }). Set by
+    // launchTimeline alongside the fly + setTimelineMode(true), consumed by the
+    // deterministic auto-play effect below once the timeline data has loaded.
     const [pendingPlay, setPendingPlay] = useState(null);
     const timelineModeRef = useRef(false);
     React.useEffect(() => { timelineModeRef.current = timelineMode; }, [timelineMode]);
@@ -549,11 +553,29 @@ function Map(props) {
 
     // Deterministic one-shot auto-play. Waits for the timeline data to load, then
     // ~800ms for the fly to settle, then plays the bloom over the pending window.
+    // A null start means "nothing configured it": resolve it to the earliest
+    // hex in the LAUNCH's framing (boundsForView over the canvas size), so a
+    // pan before auto-play fires can't move it; the lookback window when that
+    // view is empty.
     React.useEffect(() => {
         if (!pendingPlay) return;
         if (!(timelineGeoJson.features && timelineGeoJson.features.length)) return;
-        const { start, end } = pendingPlay;
         const timer = setTimeout(() => {
+            let { start, end } = pendingPlay;
+            if (start == null) {
+                const canvas = mapRef.current?.getMap()?.getCanvas();
+                const { frame } = pendingPlay;
+                if (!canvas || !frame) console.warn('timeline: no map canvas or framing; starting at the lookback window');
+                const bounds = canvas && frame ? boundsForView(frame, canvas.clientWidth, canvas.clientHeight) : null;
+                const first = firstSeenInBounds(timelineGeoJson.features, bounds);
+                start = startOfLocalDay(first != null ? first : Date.now() - FALLBACK_LOOKBACK_DAYS * DAY_MS);
+                // A link's end= before the first coverage would leave an empty
+                // window: end today instead, as the configured window did.
+                if (start > end) {
+                    console.warn('timeline: end precedes the first coverage in view; ending today');
+                    end = endOfLocalDay(Date.now());
+                }
+            }
             cursorRef.current = start;
             setRangeStart(start);
             setRangeEnd(end);
@@ -740,11 +762,15 @@ function Map(props) {
         fetch('/api/v1/coverage/timeline')
             .then(res => res.json())
             .then(rows => {
-                const features = (rows || []).map(row => ({
-                    type: "Feature",
-                    geometry: { type: "Polygon", coordinates: [h3ToGeoBoundary(row.h, true)] },
-                    properties: { id: row.h, best_rssi: row.r, first_seen: row.t }
-                }));
+                const features = (rows || []).map(row => {
+                    // Hex centre, for the first-coverage-in-view start.
+                    const [lat, lng] = h3ToGeo(row.h);
+                    return {
+                        type: "Feature",
+                        geometry: { type: "Polygon", coordinates: [h3ToGeoBoundary(row.h, true)] },
+                        properties: { id: row.h, best_rssi: row.r, first_seen: row.t, lat, lng }
+                    };
+                });
                 setTimelineGeoJson({ type: "FeatureCollection", features });
             })
             .catch(err => console.error('Failed to load timeline data:', err));
@@ -1241,7 +1267,7 @@ function Map(props) {
         setShowBaseline(!!baseline);
         setLoop(!!loop);
         setTimelineExpanded(!!open);
-        setPendingPlay({ start, end });
+        setPendingPlay({ start, end, frame: { lat, lng, zoom } });
     }, []);
 
     // Run the (global) Timeline framed on a project's region (InfoPane ▶ button).
@@ -1250,9 +1276,8 @@ function Map(props) {
     // framing, and the non-deep-link defaults (baseline on, loop off, minimized).
     const onRunProjectTimeline = useCallback((project) => {
         const cfg = TIMELINE_PROJECT_CONFIG[project.code] || {};
-        const start = cfg.start
-            ? startOfLocalDay(parseLocalDate(cfg.start))
-            : startOfLocalDay(Date.now() - FALLBACK_LOOKBACK_DAYS * DAY_MS);
+        // null = first coverage in view, resolved by the auto-play effect.
+        const start = cfg.start ? startOfLocalDay(parseLocalDate(cfg.start)) : null;
         const end = endOfLocalDay(Date.now());
         launchTimeline({
             projectCode: project.code, lat: project.lat, lng: project.lng, zoom: project.zoom || 12,
@@ -1276,13 +1301,12 @@ function Map(props) {
         const launchFrom = (project) => {
             if (!project) { console.warn('timeline deep-link: unknown project', intent.play); return; }
             const cfg = TIMELINE_PROJECT_CONFIG[project.code] || {};
-            const cfgStart = cfg.start
-                ? startOfLocalDay(parseLocalDate(cfg.start))
-                : startOfLocalDay(Date.now() - FALLBACK_LOOKBACK_DAYS * DAY_MS);
+            // null = first coverage in view, resolved by the auto-play effect.
+            const cfgStart = cfg.start ? startOfLocalDay(parseLocalDate(cfg.start)) : null;
             const cfgEnd = endOfLocalDay(Date.now());
             let start = intent.start != null ? startOfLocalDay(intent.start) : cfgStart;
             let end = intent.end != null ? endOfLocalDay(intent.end) : cfgEnd;
-            if (end <= start) {
+            if (start != null && end <= start) {
                 console.warn('timeline deep-link: end<=start, falling back to config window');
                 start = cfgStart; end = cfgEnd;
             }
