@@ -22,7 +22,8 @@ import TimelineControl, { startOfLocalDay, endOfLocalDay } from "../components/T
 import { uplinkTileServerLayer, uplinkHotspotsLineLayer, uplinkRelayLineLayer, uplinkHotspotsCircleLayer, uplinkHotspotsHexLayer, uplinkChannelLayer, gatewayMarkerLayer, gatewayLabelLayer, selectedHexLayer, timelineRevealLayer, timelineRevealFilter as buildTimelineRevealFilter, otherHexLayer } from './Layers.js';
 import { get } from '../data/Rest'
 import { getInitialProjects, fetchProjects } from '../utils/projects'
-import { parseTimelineLink, buildTimelineLink } from '../utils/timelineLink'
+import { parseTimelineLink, buildTimelineLink, timelineSettingsUrl } from '../utils/timelineLink'
+import { timelineDefaults } from '../utils/projects'
 import { firstSeenInBounds, boundsForView } from '../utils/timelineWindow'
 import { parseProjectLink, buildProjectPath, urlMirrorAction } from '../utils/projectLink'
 import { gatewayFeatures, gatewayRecordsIndex, refreshPopupGw, applyHeardToFeatures, applyHeardToPopup, keepNewerHeard } from '../utils/gatewayFeed'
@@ -1275,7 +1276,8 @@ function Map(props) {
     // the per-project config for start/speed, the project's coords/zoom for
     // framing, and the non-deep-link defaults (baseline on, loop off, minimized).
     const onRunProjectTimeline = useCallback((project) => {
-        const cfg = TIMELINE_PROJECT_CONFIG[project.code] || {};
+        // app.buoy.fish's per-project values, then the env config.
+        const cfg = timelineDefaults(project, TIMELINE_PROJECT_CONFIG);
         // null = first coverage in view, resolved by the auto-play effect.
         const start = cfg.start ? startOfLocalDay(parseLocalDate(cfg.start)) : null;
         const end = endOfLocalDay(Date.now());
@@ -1300,7 +1302,7 @@ function Map(props) {
         if (!intent) return;
         const launchFrom = (project) => {
             if (!project) { console.warn('timeline deep-link: unknown project', intent.play); return; }
-            const cfg = TIMELINE_PROJECT_CONFIG[project.code] || {};
+            const cfg = timelineDefaults(project, TIMELINE_PROJECT_CONFIG);
             // null = first coverage in view, resolved by the auto-play effect.
             const cfgStart = cfg.start ? startOfLocalDay(parseLocalDate(cfg.start)) : null;
             const cfgEnd = endOfLocalDay(Date.now());
@@ -1520,6 +1522,7 @@ function Map(props) {
                     expanded={timelineExpanded}
                     onToggleExpanded={() => setTimelineExpanded(e => !e)}
                     shareUrl={shareUrl}
+                    settingsUrl={timelineSettingsUrl(activeTimelineProjectCode, process.env.BUOY_API_BASE_URL)}
                 />
             }
             <WelcomeModal showWelcomeModal={showWelcomeModal && !isHexDeepLink && !isTimelineDeepLink && !isProjectDeepLink} onCloseWelcomeModalClick={onCloseWelcomeModalClick} />

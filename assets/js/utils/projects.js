@@ -40,7 +40,10 @@ function isFiniteNumber(n) {
     return typeof n === "number" && Number.isFinite(n)
 }
 
-function normalizeProject(raw) {
+const TIMELINE_SPEEDS = [1, 2, 4]
+const YMD = /^\d{4}-\d{2}-\d{2}$/
+
+export function normalizeProject(raw) {
     if (!raw || typeof raw !== "object") return null
     const code = typeof raw.code === "string" && raw.code.length > 0 ? raw.code : null
     const name = typeof raw.name === "string" && raw.name.length > 0 ? raw.name : null
@@ -52,7 +55,24 @@ function normalizeProject(raw) {
     if (lat < -90 || lat > 90) return null
     if (lng < -180 || lng > 180) return null
     if (zoom < 0 || zoom > 22) return null
-    return { code, name, lat, lng, zoom }
+    // Timeline defaults, edited per project in app.buoy.fish (null = unset).
+    const timeline_start = typeof raw.timeline_start === "string" && YMD.test(raw.timeline_start) ? raw.timeline_start : null
+    const timeline_speed = TIMELINE_SPEEDS.includes(raw.timeline_speed) ? raw.timeline_speed : null
+    return { code, name, lat, lng, zoom, timeline_start, timeline_speed }
+}
+
+/**
+ * A project's timeline defaults: app.buoy.fish's values (from the feed) win,
+ * then the legacy TIMELINE_PROJECT_CONFIG env entry, then the built-ins.
+ * `start` is 'YYYY-MM-DD' or null (null = first coverage in view); `speed`
+ * is 1, 2 or 4.
+ */
+export function timelineDefaults(project, envConfig) {
+    const env = (project && project.code && envConfig && envConfig[project.code]) || {}
+    return {
+        start: (project && project.timeline_start) || env.start || null,
+        speed: (project && project.timeline_speed) || env.speed || 1,
+    }
 }
 
 function normalizeProjectsList(raw) {

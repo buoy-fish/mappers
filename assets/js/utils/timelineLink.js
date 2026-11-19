@@ -83,6 +83,15 @@ export function buildTimelineLink(state, origin) {
     return `${base}/?${p.toString()}`;
 }
 
+// The timeline ⚙: the project's map view in app.buoy.fish, where its timeline
+// start and speed are edited (the app's Projects page opens a project by code
+// and `focus=map` expands that section). Null without a code or app base URL.
+// Editing still needs a platform admin there; anyone else hits its sign-in.
+export function timelineSettingsUrl(projectCode, appBase) {
+    if (!projectCode || !appBase) return null;
+    return `${appBase}/admin/projects?open=${encodeURIComponent(projectCode)}&focus=map`;
+}
+
 // Parse a raw query string (location.search) into a normalized intent, or null
 // when `play` is absent. Does NOT resolve the project (that needs the projects
 // list, which lives in Map.js). start/end/speed are null when absent/invalid so
