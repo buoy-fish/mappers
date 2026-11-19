@@ -1,5 +1,12 @@
 import Config
 
+# A local app (any port) may embed a local map picker.
+config :mappers, :frame_ancestors, [
+  "https://app.buoy.fish",
+  "http://localhost:*",
+  "http://127.0.0.1:*"
+]
+
 # Configure your database (all configurable via .env.development)
 config :mappers, Mappers.Repo,
   username: System.get_env("DB_USER") || "postgres",

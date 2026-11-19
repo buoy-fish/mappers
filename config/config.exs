@@ -16,6 +16,10 @@ config :mappers,
   inventory_refresh_ms: 60_000,
   scope_cache_ms: 60_000
 
+# Origins allowed to frame the map (MappersWeb.Plug.FrameAncestors): app.buoy.fish
+# embeds `/?embed=picker` as its projects' "Default map view" picker.
+config :mappers, :frame_ancestors, ["https://app.buoy.fish"]
+
 config :mappers, Mappers.Repo,
   types: Mappers.PostgresTypes
 

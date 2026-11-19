@@ -24,6 +24,7 @@ import { get } from '../data/Rest'
 import { getInitialProjects, fetchProjects, timelineDefaults } from '../utils/projects'
 import { parseTimelineLink, buildTimelineLink, timelineSettingsUrl } from '../utils/timelineLink'
 import { firstSeenInBounds, boundsForView } from '../utils/timelineWindow'
+import { isAllowedParentOrigin, cameraMessage, parseFlyMessage } from '../utils/embedPicker'
 import { parseProjectLink, buildProjectPath, urlMirrorAction } from '../utils/projectLink'
 import { gatewayFeatures, gatewayRecordsIndex, refreshPopupGw, applyHeardToFeatures, applyHeardToPopup, keepNewerHeard } from '../utils/gatewayFeed'
 import { geoToH3, h3ToGeo, h3ToGeoBoundary } from "h3-js";
@@ -240,6 +241,11 @@ function Map(props) {
         pitch: 0
     });
     const mapRef = useRef(null);
+    // Embedded in app.buoy.fish as a project's "Default map view" picker
+    // (utils/embedPicker.js): the plain public map, no panes, modals or hex
+    // selection, reporting its camera to the app and taking fly-to requests.
+    // Fixed for the page.
+    const embedPicker = props.embedPicker || null;
 
     // Ref-callback that doubles as our earliest hook into the underlying
     // mapbox-gl map instance. We use it to register a `style.load` listener
@@ -1046,6 +1052,9 @@ function Map(props) {
     }
 
     const onClick = useCallback(event => {
+        // The picker only frames a view: no hex selection (its pane is hidden,
+        // so it could never be cleared) and no navigation inside the iframe.
+        if (embedPicker) return;
         const features = event.features;
         const map = mapRef.current?.getMap();
         if (!map) return;
@@ -1403,11 +1412,47 @@ function Map(props) {
 
     const interactiveLayerIds = [...HEX_LAYERS, 'gatewayMarkerLayer'];
 
+    const embedParentOriginRef = useRef(null);
+    const postCamera = useCallback((vs) => {
+        const origin = embedParentOriginRef.current;
+        if (origin && window.parent !== window) window.parent.postMessage(cameraMessage(vs), origin);
+    }, []);
+    React.useEffect(() => {
+        if (!embedPicker || window.parent === window) return undefined;
+        const appBase = process.env.APP_UI_BASE_URL;
+        const allowed = (o) => isAllowedParentOrigin(o, appBase, window.location.hostname);
+        let parentOrigin = null;
+        try {
+            const ref = document.referrer && new URL(document.referrer).origin;
+            if (allowed(ref)) parentOrigin = ref;
+        } catch (_) { /* no usable referrer */ }
+        if (!parentOrigin) {
+            try { parentOrigin = new URL(appBase).origin; } catch (_) { /* none */ }
+            console.warn('embed picker: no allowed referrer; reporting to', parentOrigin, 'until the parent writes');
+        }
+        embedParentOriginRef.current = parentOrigin;
+        const onMessage = (e) => {
+            if (e.source !== window.parent || !allowed(e.origin)) return;
+            const fly = parseFlyMessage(e.data);
+            if (!fly) return;
+            // The parent proved its origin by writing: report there from now on.
+            embedParentOriginRef.current = e.origin;
+            const next = { latitude: fly.lat, longitude: fly.lng, zoom: fly.zoom };
+            setViewState(v => ({ ...v, ...next }));
+            // A prop-driven move fires no onMoveEnd: echo the camera ourselves.
+            postCamera(next);
+        };
+        window.addEventListener('message', onMessage);
+        return () => window.removeEventListener('message', onMessage);
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps -- embed mode is fixed for the page
+
     return (
         <div className='map-container'>
             <MapGL
                 {...viewState}
                 onMove={evt => setViewState(evt.viewState)}
+                onMoveEnd={embedPicker ? (evt => postCamera(evt.viewState)) : undefined}
+                minZoom={embedPicker ? 0 : undefined}
                 style={{ width: "100vw", height: "100vh" }}
                 mapStyle={MAP_STYLE}
                 mapboxAccessToken={USE_MAPBOX ? MAPBOX_TOKEN : undefined}
@@ -1417,7 +1462,14 @@ function Map(props) {
                 onTouchEnd={cancelGwLongPress}
                 onTouchMove={cancelGwLongPress}
                 onTouchCancel={cancelGwLongPress}
-                onLoad={USE_MAPBOX ? (e) => {
+                onLoad={(USE_MAPBOX || embedPicker) ? (e) => {
+                    // The picker's first camera report, so the app knows the
+                    // embed is live and where it sits.
+                    if (embedPicker) {
+                        const c = e.target.getCenter();
+                        postCamera({ latitude: c.lat, longitude: c.lng, zoom: e.target.getZoom() });
+                    }
+                    if (!USE_MAPBOX) return;
                     // Belt-and-suspenders: in the rare case the
                     // ref-callback-attached `style.load` listener (in
                     // setMapRef) hasn't fired yet, apply the treatment + hide
@@ -1432,15 +1484,17 @@ function Map(props) {
             >
                 {/* Satellite theme toggle, top of the control stack — only on
                     the Mapbox basemap (CARTO has no raster to treat). */}
-                {USE_MAPBOX &&
+                {USE_MAPBOX && !embedPicker &&
                     <ThemeControl dark={darkSatellite} onToggle={() => setDarkSatellite(!darkSatellite)} />
                 }
-                <GeolocateControl
-                    positionOptions={{ enableHighAccuracy: true }}
-                    fitBoundsOptions={{ maxZoom: viewState.zoom }}
-                    trackUserLocation={true}
-                    position="top-right"
-                />
+                {!embedPicker &&
+                    <GeolocateControl
+                        positionOptions={{ enableHighAccuracy: true }}
+                        fitBoundsOptions={{ maxZoom: viewState.zoom }}
+                        trackUserLocation={true}
+                        position="top-right"
+                    />
+                }
                 <NavigationControl position="top-right" />
                 {/* Two render paths. In timeline mode we feed the static
                     historical-coverage source and suppress both live sources;
@@ -1514,7 +1568,7 @@ function Map(props) {
                 }
 
             </MapGL>
-            <InfoPane hexId={hexId} bestRssi={bestRssi} snr={snr} uplinks={uplinks} gatewayRecords={gatewayRecords} showHexPane={showHexPane} onCloseHexPaneClick={onCloseHexPaneClick} showHexPaneCloseButton={showHexPaneCloseButton} showGateways={showGateways} onToggleGateways={onToggleGateways} hideCoverage={hideCoverage} onToggleCoverage={onToggleCoverage} showOtherHexes={showOtherHexes} onToggleOtherHexes={onToggleOtherHexes} onFlyToProject={onFlyToProject} onRunProjectTimeline={onRunProjectTimeline} timelineConfig={TIMELINE_PROJECT_CONFIG} />
+            {!embedPicker && <InfoPane hexId={hexId} bestRssi={bestRssi} snr={snr} uplinks={uplinks} gatewayRecords={gatewayRecords} showHexPane={showHexPane} onCloseHexPaneClick={onCloseHexPaneClick} showHexPaneCloseButton={showHexPaneCloseButton} showGateways={showGateways} onToggleGateways={onToggleGateways} hideCoverage={hideCoverage} onToggleCoverage={onToggleCoverage} showOtherHexes={showOtherHexes} onToggleOtherHexes={onToggleOtherHexes} onFlyToProject={onFlyToProject} onRunProjectTimeline={onRunProjectTimeline} timelineConfig={TIMELINE_PROJECT_CONFIG} />}
             {timelineMode && timeDomain.minT !== null && timeDomain.maxT !== null &&
                 <TimelineControl
                     minT={timeDomain.minT}
@@ -1543,7 +1597,7 @@ function Map(props) {
                     settingsUrl={timelineSettingsUrl(activeTimelineProjectCode, process.env.APP_UI_BASE_URL)}
                 />
             }
-            <WelcomeModal showWelcomeModal={showWelcomeModal && !isHexDeepLink && !isTimelineDeepLink && !isProjectDeepLink} onCloseWelcomeModalClick={onCloseWelcomeModalClick} />
+            <WelcomeModal showWelcomeModal={showWelcomeModal && !embedPicker && !isHexDeepLink && !isTimelineDeepLink && !isProjectDeepLink} onCloseWelcomeModalClick={onCloseWelcomeModalClick} />
         </div>
     );
 }
