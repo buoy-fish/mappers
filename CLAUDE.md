@@ -87,9 +87,9 @@ Everything the map shows is addressable, so any view can be copied out of the ad
 | `/<project-code>/show-gateways` | …plus display toggles. Flag segments are order-independent, and a nested flag implies its parents (`show-mobile-hexes` ⇒ `hide-coverage` ⇒ `show-gateways`) |
 | `/show-gateways` | Flags with no project |
 | `/uplinks/hex/:h3_index` | A single hex, info pane open |
-| `/?play=<project-code>&start=…&end=…&speed=…&loop=…&lat=…&lng=…&zoom=…` | Timeline bloom; built by the scrubber's Copy-link button |
+| `/?play=<project-code>&start=…&end=…&speed=…&baseline=…&loop=…&lat=…&lng=…&zoom=…` | Timeline bloom; built by the scrubber's Copy-link button. `baseline` (earlier coverage) defaults on; `baseline=0` stages a blank-start bloom |
 
-Both codecs are pure and framework-free: `assets/js/utils/projectLink.js` (path form, flag vocabulary, reserved prefixes) and `assets/js/utils/timelineLink.js` (query form). `projectLink` has unit tests in `assets/test/projectLink.test.mjs`, which also covers `urlMirrorAction`, the decision of who owns the address bar; `timelineLink` is still verified by hand.
+Both codecs are pure and framework-free: `assets/js/utils/projectLink.js` (path form, flag vocabulary, reserved prefixes) and `assets/js/utils/timelineLink.js` (query form). `projectLink` has unit tests in `assets/test/projectLink.test.mjs`, which also covers `urlMirrorAction`, the decision of who owns the address bar; `timelineLink` has unit tests in `assets/test/timelineLink.test.mjs`, and the timeline layer's filter in `assets/test/timelineFilter.test.mjs`.
 
 `Map.js` treats the URL as the source of truth in both directions — it applies an incoming path and mirrors state back out (project changes push history, toggles replace), which is what makes Back/Forward work between views. A shared `?play=` link owns the address bar on arrival and hands it to the view on the visitor's first explicit action, so a timeline link isn't stripped on load *and* isn't stuck for the rest of the session.
 

@@ -42,8 +42,8 @@ is explicitly NOT).
 
 **Baseline coverage**:
 The hexes first-seen *before* a selected range's start — the pre-existing
-footprint the animation builds on top of. Shown beneath the bloom by default,
-and hideable via a toggle so the user can stage a blank-start animation for any
+footprint the animation builds on top of. Shown by default, in the same style
+as the bloom (so the end of a replay matches the live map), and hideable via a toggle so the user can stage a blank-start animation for any
 later period.
 
 **Bloom**:

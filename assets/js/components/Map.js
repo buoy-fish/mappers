@@ -19,7 +19,7 @@ import GatewayTooltip from "../components/GatewayTooltip"
 import ThemeControl from "../components/ThemeControl"
 import WelcomeModal from "../components/WelcomeModal"
 import TimelineControl, { startOfLocalDay, endOfLocalDay } from "../components/TimelineControl"
-import { uplinkTileServerLayer, uplinkHotspotsLineLayer, uplinkRelayLineLayer, uplinkHotspotsCircleLayer, uplinkHotspotsHexLayer, uplinkChannelLayer, gatewayMarkerLayer, gatewayLabelLayer, selectedHexLayer, timelineRevealLayer, timelineBaselineLayer, otherHexLayer } from './Layers.js';
+import { uplinkTileServerLayer, uplinkHotspotsLineLayer, uplinkRelayLineLayer, uplinkHotspotsCircleLayer, uplinkHotspotsHexLayer, uplinkChannelLayer, gatewayMarkerLayer, gatewayLabelLayer, selectedHexLayer, timelineRevealLayer, timelineRevealFilter as buildTimelineRevealFilter, otherHexLayer } from './Layers.js';
 import { get } from '../data/Rest'
 import { getInitialProjects, fetchProjects } from '../utils/projects'
 import { parseTimelineLink, buildTimelineLink } from '../utils/timelineLink'
@@ -184,7 +184,7 @@ function hideBasemapClutter(map) {
 // Layers whose features represent a clickable hex, in the order onClick
 // dispatches on them. Gateway markers are interactive too, but they're handled
 // separately (they swallow the click) so they're not listed here.
-const HEX_LAYERS = ['public.h3_res9', 'uplinkChannelLayer', 'timelineRevealLayer', 'timelineBaselineLayer'];
+const HEX_LAYERS = ['public.h3_res9', 'uplinkChannelLayer', 'timelineRevealLayer'];
 
 var selectedStateIdTile = null;
 var selectedStateIdChannel = null;
@@ -407,8 +407,8 @@ function Map(props) {
     React.useEffect(() => { timelineModeRef.current = timelineMode; }, [timelineMode]);
 
     // ------------------------------------------------------------------
-    // Timeline control state. Lifted here so the two timeline Layers'
-    // filters stay declarative props driven by rangeStart / cursor.
+    // Timeline control state. Lifted here so the timeline Layer's filter
+    // stays a declarative prop driven by rangeStart / cursor / showBaseline.
     //   - rangeStart / rangeEnd: window handles, snapped to LOCAL whole days.
     //   - cursor: continuous epoch-ms playhead ("coverage as-of this instant").
     //   - playing / speed / showBaseline: playback + display knobs.
@@ -420,7 +420,9 @@ function Map(props) {
     const [cursor, setCursor] = useState(0);
     const [playing, setPlaying] = useState(false);
     const [speed, setSpeed] = useState(1);
-    const [showBaseline, setShowBaseline] = useState(false);
+    // Baseline ON by default (GLOSSARY) so the end of the timeline matches the
+    // live map; the toggle stages a blank-start animation.
+    const [showBaseline, setShowBaseline] = useState(true);
     // Continuous loop: when on, the bloom restarts from rangeStart on reaching
     // the end instead of the default one-shot stop. Drives shareable "always
     // playing" deep-links.
@@ -572,22 +574,12 @@ function Map(props) {
     const onSetSpeed = useCallback(s => setSpeed(s), []);
     const onToggleBaseline = useCallback(() => setShowBaseline(b => !b), []);
 
-    // Declarative MapLibre filters for the two timeline layers, driven by state.
-    //   Bloom:    in-range hexes revealed up to the cursor.
-    //   Baseline: pre-range footprint (first_seen < rangeStart).
-    const timelineRevealFilter = React.useMemo(() => ([
-        'all',
-        ['>=', ['get', 'first_seen'], rangeStart],
-        ['<=', ['get', 'first_seen'], cursor]
-    ]), [rangeStart, cursor]);
-    // When showBaseline is off, gate the (always-mounted) baseline layer with a
-    // match-nothing filter instead of unmounting it. first_seen is always a
-    // positive epoch-ms, so == -1 never matches → nothing drawn.
-    const timelineBaselineFilter = React.useMemo(() => (
-        showBaseline
-            ? ['<', ['get', 'first_seen'], rangeStart]
-            : ['==', ['get', 'first_seen'], -1]
-    ), [showBaseline, rangeStart]);
+    // Declarative MapLibre filter for the timeline layer, driven by state
+    // (semantics in Layers.js#timelineRevealFilter).
+    const timelineRevealFilter = React.useMemo(
+        () => buildTimelineRevealFilter({ rangeStart, cursor, showBaseline }),
+        [showBaseline, rangeStart, cursor]
+    );
     // Dark/light satellite toggle. Default true (dark) so first-time visitors
     // see the visually punchy treatment that lets coverage hexes pop. Persisted
     // per-browser via localStorage so users keep their preference across visits.
@@ -1085,7 +1077,7 @@ function Map(props) {
 
             setTimeout(() => { setShowHexPaneCloseButton(true); }, 1000)
         }
-        else if (feature.layer.id == "timelineRevealLayer" || feature.layer.id == "timelineBaselineLayer") {
+        else if (feature.layer.id == "timelineRevealLayer") {
             // Timeline hexes open the same InfoPane as live hexes. The
             // detail (hotspot list, distances) comes from
             // /api/v1/uplinks/hex/:id, which works for any hex. Timeline
@@ -1236,7 +1228,9 @@ function Map(props) {
     const launchTimeline = useCallback(({ projectCode, lat, lng, zoom, start, end, speed, baseline, loop, open }) => {
         setViewState(prev => ({ ...prev, latitude: lat, longitude: lng, zoom }));
         setTimelineMode(true);
-        // Start BLANK so the bloom begins on an empty map (no full→blank flash).
+        // Reset to an empty window so nothing draws until pendingPlay sets the
+        // real one (no flash of the previous window). With the baseline on,
+        // pre-range coverage then appears at once and the bloom grows on it.
         setRangeStart(0); setRangeEnd(0); setCursor(0); setPlaying(false);
         setActiveTimelineProjectCode(projectCode);
         // A timeline launch also frames a project, so the path reflects it
@@ -1253,7 +1247,7 @@ function Map(props) {
     // Run the (global) Timeline framed on a project's region (InfoPane ▶ button).
     // No data scoping — the timeline stays global; we only frame the view. Uses
     // the per-project config for start/speed, the project's coords/zoom for
-    // framing, and the non-deep-link defaults (baseline/loop off, minimized).
+    // framing, and the non-deep-link defaults (baseline on, loop off, minimized).
     const onRunProjectTimeline = useCallback((project) => {
         const cfg = TIMELINE_PROJECT_CONFIG[project.code] || {};
         const start = cfg.start
@@ -1262,7 +1256,7 @@ function Map(props) {
         const end = endOfLocalDay(Date.now());
         launchTimeline({
             projectCode: project.code, lat: project.lat, lng: project.lng, zoom: project.zoom || 12,
-            start, end, speed: cfg.speed || 1, baseline: false, loop: false, open: false,
+            start, end, speed: cfg.speed || 1, baseline: true, loop: false, open: false,
         });
         // Released HERE rather than in launchTimeline, which the arriving
         // ?play= deep-link also calls — releasing there would rewrite the
@@ -1408,17 +1402,13 @@ function Map(props) {
                     historical-coverage source and suppress both live sources;
                     otherwise we render the live sources exactly as before.
 
-                    The timeline Source + BOTH Layers are ALWAYS mounted (never
+                    The timeline Source + Layer are ALWAYS mounted (never
                     conditionally rendered) — react-map-gl's Layer does a setState
                     on unmount, which fired a "state update on unmounted
                     component" warning when exiting timeline mode. We gate them by
                     DATA/FILTER instead: empty FeatureCollection when not in
-                    timeline mode (nothing drawn, clicks pass through), and the
-                    baseline layer is shown/hidden via a match-nothing filter
-                    rather than unmounting. */}
+                    timeline mode (nothing drawn, clicks pass through). */}
                 <Source id="timeline" type="geojson" data={timelineMode ? timelineGeoJson : emptyFC}>
-                    {/* Baseline declared FIRST so the bloom paints on top. */}
-                    <Layer {...timelineBaselineLayer} filter={timelineBaselineFilter} />
                     <Layer {...timelineRevealLayer} filter={timelineRevealFilter} />
                 </Source>
                 {!timelineMode && !hideCoverage &&
