@@ -4,7 +4,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { normalizeProject, timelineDefaults } from '../js/utils/projects.js'
+import { normalizeProject, timelineDefaults, FALLBACK_PROJECTS } from '../js/utils/projects.js'
 import { timelineSettingsUrl } from '../js/utils/timelineLink.js'
 
 const RAW = { code: 'gulf-of-nicoya-costa-rica', name: 'Gulf of Nicoya', lat: 10.07, lng: -85.03, zoom: 8.3 }
@@ -32,10 +32,6 @@ test("the settings link opens the project's map view in the app, by code", () =>
     assert.equal(timelineSettingsUrl('x', ''), null)
 })
 
-// Once app.buoy.fish serves the fields, its null is a choice ("first coverage,
-// 1×"), not "unset": an admin clearing the start must not fall back to the
-// env entry the app replaced.
-
 test("the app's values are the defaults", () => {
     const project = normalizeProject({ ...RAW, timeline_start: '2026-07-01', timeline_speed: 4 })
     assert.deepEqual(timelineDefaults(project), { start: '2026-07-01', speed: 4 })
@@ -47,9 +43,9 @@ test('nothing set in the app: first coverage in view at 1x', () => {
     assert.deepEqual(timelineDefaults(null), { start: null, speed: 1 })
 })
 
-// The retired TIMELINE_PROJECT_CONFIG env var: a second argument, as the old
-// callers passed, is ignored.
-test('no env-config fallback any more', () => {
-    const env = { 'gulf-of-nicoya-costa-rica': { start: '2026-09-19', speed: 2 } }
-    assert.deepEqual(timelineDefaults(normalizeProject(RAW), env), { start: null, speed: 1 })
+// With app.buoy.fish unreachable and nothing cached, the fallback project
+// still replays from the start it has in the app.
+test('the fallback project keeps its timeline start', () => {
+    const fallback = FALLBACK_PROJECTS.find(p => p.code === 'punta-abreojos-baja')
+    assert.deepEqual(timelineDefaults(normalizeProject(fallback)), { start: '2026-04-10', speed: 1 })
 })

@@ -33,9 +33,10 @@ const API_BASE_URL = process.env.BUOY_API_BASE_URL || ""
 
 // Brand-new install / downed backend fallback. Keep at least one entry so
 // the sidebar isn't empty. Mirrors the seeded `punta-abreojos-baja` row
-// in app.buoy.fish's seed migration.
+// in app.buoy.fish's seed migration, timeline start included (backfilled
+// there from the retired TIMELINE_PROJECT_CONFIG).
 export const FALLBACK_PROJECTS = Object.freeze([
-    Object.freeze({ code: "punta-abreojos-baja", name: "Punta Abreojos, Baja", lat: 26.72, lng: -113.56, zoom: 12 }),
+    Object.freeze({ code: "punta-abreojos-baja", name: "Punta Abreojos, Baja", lat: 26.72, lng: -113.56, zoom: 12, timeline_start: "2026-04-10", timeline_speed: null }),
 ])
 
 function isFiniteNumber(n) {
